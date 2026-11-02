@@ -994,6 +994,49 @@ jobs:
       ci-workflow: ci.yml
 ```
 
+## beachball-publish-npm
+
+A reusable workflow. It releases a workspace's Beachball change files in one job, with no release pull request:
+`beachball publish` bumps the versions and changelogs, publishes the new versions to npm through trusted publishing,
+then commits them, tags each version and pushes to the default branch. That push starts the caller's CI again, which
+finds no change files and releases nothing.
+
+- **It pushes with a deploy key,** since the job's own token can't skip the branch's pull request rule. Keep the default
+  branch in a ruleset whose bypass list has deploy keys, add a deploy key with write access, and put its private key in
+  the environment's `RELEASE_DEPLOY_KEY` secret. Without it, the run skips with a notice.
+- **It releases the commit CI passed on,** and only while that's still the default branch's head. A newer commit's run
+  releases that one.
+- **With no change files,** it builds and publishes nothing.
+- **What npm needs** is as for `cd-npm-publish`: each package's trusted publisher names the caller's workflow file and
+  the environment, a first version published by hand, and a `repository.url` that matches the repository. Beachball
+  turns `workspace:` and `catalog:` ranges into versions as it publishes.
+- **A dry run** bumps in the runner's checkout and reports the versions, on any branch, without the environment.
+
+| Input               | Default                                   | What it's for                                                      |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| `working-directory` | `.`                                       | The workspace's root, relative to the repository's.                |
+| `environment`       | `npm`                                     | The environment the release runs in, holding `RELEASE_DEPLOY_KEY`. |
+| `build-command`     | `pnpm --recursive run --if-present build` | What builds the packages, in the working directory.                |
+| `message`           | `chore(release): publish packages`        | The release commit's message.                                      |
+| `tag`               | `latest`                                  | The npm dist-tag the new versions get.                             |
+| `toolchain`         | `auto`                                    | As the setup action takes it.                                      |
+| `dry-run`           | `false`                                   | Bump and report without publishing or pushing.                     |
+
+Secrets: `RELEASE_DEPLOY_KEY`, from the environment or passed by the caller. Outputs: `packages`, those whose version
+changed, as a JSON array of `name`, `from` and `to`; and `published`. Permissions: `contents: read` and
+`id-token: write`, which the calling job grants.
+
+```yaml
+# In the caller's ci.yml, after the jobs that verify main. Each package's trusted publisher names ci.yml.
+release:
+  needs: [verify]
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  permissions:
+    contents: read
+    id-token: write
+  uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@<commit sha> # <version>
+```
+
 ## Web apps
 
 `preview-web`, `preview-web-cleanup`, `cd-web-deploy` and `cd-web-promote` deliver a web app to Cloudflare Workers: a

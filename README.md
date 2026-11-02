@@ -19,27 +19,28 @@ fix lands in one place instead of being copied between repositories.
 
 ## What's here
 
-| Template                                    | Kind              | What it does                                                                                                |
-| ------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| `github/actions/setup`                      | Composite action  | Checks out, installs Node, Vite+ or pnpm, and the workspace's dependencies                                  |
-| `github/actions/neon-branch`                | Composite action  | Makes or reuses a Neon branch by name and gives its URLs, or deletes it                                     |
-| `github/actions/pr-comment`                 | Composite action  | Writes a pull request comment found by a marker, editing it on later runs                                   |
-| `github/actions/vite-task-cache`            | Composite action  | Keeps Vite+'s task cache between runs, so `vp run` replays tasks whose inputs haven't changed               |
-| `.github/workflows/ci-verify.yml`           | Reusable workflow | Runs the workspace's `pnpm verify` on each operating system the caller lists                                |
-| `.github/workflows/publish-storybook.yml`   | Reusable workflow | Publishes a Storybook to the environment the caller names: a pull request's preview, staging or production  |
-| `.github/workflows/unpublish-storybook.yml` | Reusable workflow | Deletes a pull request's Storybook preview                                                                  |
-| `.github/workflows/preview-web.yml`         | Reusable workflow | Publishes a pull request's web app as a Worker preview, optionally with a Neon branch, and comments its URL |
-| `.github/workflows/preview-web-cleanup.yml` | Reusable workflow | Deletes a pull request's web app preview, and its Neon branch when it has one                               |
-| `.github/workflows/terraform-plan.yml`      | Reusable workflow | Plans a pull request's Terraform project against its state in R2, and comments a summary of the plan        |
-| `.github/workflows/terraform-apply.yml`     | Reusable workflow | Applies a Terraform project in a GitHub environment, such as from `main` after a merge                      |
-| `.github/workflows/release-prepare.yml`     | Reusable workflow | Opens or updates Beachball's release pull request from the change files on `main`                           |
-| `.github/workflows/release-merge.yml`       | Reusable workflow | Merges the release pull request through auto-merge once `main`'s rules are met                              |
-| `.github/workflows/cd-npm-publish.yml`      | Reusable workflow | Publishes the packages whose versions npm doesn't have, through trusted publishing with provenance          |
-| `.github/workflows/cd-web-deploy.yml`       | Reusable workflow | Builds, migrates and deploys a web app to the environment the caller names, such as staging                 |
-| `.github/workflows/cd-web-promote.yml`      | Reusable workflow | Deploys the commit staging has to production, once production's protection rules let it                     |
-| `terraform/cloudflare-storybook`            | Terraform module  | Makes the Workers Storybooks publish to, and the environment settings `publish-storybook` reads             |
-| `terraform/cloudflare-web`                  | Terraform module  | Makes a web app's Workers and token, and the environment settings the web templates read                    |
-| `terraform/github-repository-rules`         | Terraform module  | Writes a repository's rulesets: pull requests into the default branch, and release tags that never move     |
+| Template                                      | Kind              | What it does                                                                                                |
+| --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| `github/actions/setup`                        | Composite action  | Checks out, installs Node, Vite+ or pnpm, and the workspace's dependencies                                  |
+| `github/actions/neon-branch`                  | Composite action  | Makes or reuses a Neon branch by name and gives its URLs, or deletes it                                     |
+| `github/actions/pr-comment`                   | Composite action  | Writes a pull request comment found by a marker, editing it on later runs                                   |
+| `github/actions/vite-task-cache`              | Composite action  | Keeps Vite+'s task cache between runs, so `vp run` replays tasks whose inputs haven't changed               |
+| `.github/workflows/ci-verify.yml`             | Reusable workflow | Runs the workspace's `pnpm verify` on each operating system the caller lists                                |
+| `.github/workflows/publish-storybook.yml`     | Reusable workflow | Publishes a Storybook to the environment the caller names: a pull request's preview, staging or production  |
+| `.github/workflows/unpublish-storybook.yml`   | Reusable workflow | Deletes a pull request's Storybook preview                                                                  |
+| `.github/workflows/preview-web.yml`           | Reusable workflow | Publishes a pull request's web app as a Worker preview, optionally with a Neon branch, and comments its URL |
+| `.github/workflows/preview-web-cleanup.yml`   | Reusable workflow | Deletes a pull request's web app preview, and its Neon branch when it has one                               |
+| `.github/workflows/terraform-plan.yml`        | Reusable workflow | Plans a pull request's Terraform project against its state in R2, and comments a summary of the plan        |
+| `.github/workflows/terraform-apply.yml`       | Reusable workflow | Applies a Terraform project in a GitHub environment, such as from `main` after a merge                      |
+| `.github/workflows/release-prepare.yml`       | Reusable workflow | Opens or updates Beachball's release pull request from the change files on `main`                           |
+| `.github/workflows/release-merge.yml`         | Reusable workflow | Merges the release pull request through auto-merge once `main`'s rules are met                              |
+| `.github/workflows/cd-npm-publish.yml`        | Reusable workflow | Publishes the packages whose versions npm doesn't have, through trusted publishing with provenance          |
+| `.github/workflows/beachball-publish-npm.yml` | Reusable workflow | Bumps, publishes and pushes a release in one job with `beachball publish`, pushing with a deploy key        |
+| `.github/workflows/cd-web-deploy.yml`         | Reusable workflow | Builds, migrates and deploys a web app to the environment the caller names, such as staging                 |
+| `.github/workflows/cd-web-promote.yml`        | Reusable workflow | Deploys the commit staging has to production, once production's protection rules let it                     |
+| `terraform/cloudflare-storybook`              | Terraform module  | Makes the Workers Storybooks publish to, and the environment settings `publish-storybook` reads             |
+| `terraform/cloudflare-web`                    | Terraform module  | Makes a web app's Workers and token, and the environment settings the web templates read                    |
+| `terraform/github-repository-rules`           | Terraform module  | Writes a repository's rulesets: pull requests into the default branch, and release tags that never move     |
 
 Planned, in the order repositories need them: previews (`preview-npm`, `preview-desktop` and their cleanup), and the
 rest of delivery (`cd-desktop-build`, `cd-desktop-release`, `cd-desktop-promote`).
@@ -109,9 +110,9 @@ examples, vite-task-cache with the Vite+ example's tasks, checking a fresh runne
 workflows against them. A reusable workflow uses this repository's actions at the release it names, so a change to an
 action is tested directly, and reaches the workflows when it's released. It also validates every Terraform module's
 example, and checks the Storybook, Terraform and web templates skip cleanly where nothing is set up for them.
-`release-prepare` and `cd-npm-publish` run as dry runs against the release example, which need no token: the bump's
-title and versions, and which packages each publishing rule picks, in order. `release-merge` only acts on a real release
-pull request, so actionlint is its only check here.
+`release-prepare`, `cd-npm-publish` and `beachball-publish-npm` run as dry runs against the release example, which need
+no token: the bump's title and versions, and which packages each publishing rule picks, in order. `release-merge` only
+acts on a real release pull request, so actionlint is its only check here.
 
 The repository is on Vite+, as its callers are: `pnpm format` formats the workflows, actions, modules and docs with
 `vp fmt`, and `pnpm verify` checks them, which CI runs through ci-verify. Each example workspace keeps its own settings.

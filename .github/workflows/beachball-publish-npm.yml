@@ -1,0 +1,181 @@
+name: Publish to npm with Beachball
+
+# Releases a workspace's change files in one job: `beachball publish` bumps the versions and changelogs, publishes the
+# new versions to npm through trusted publishing, with provenance and no token, then commits them, tags each version,
+# and pushes to the default branch. The push uses a deploy key, the one actor the branch's ruleset lets skip a pull
+# request, kept in the environment's RELEASE_DEPLOY_KEY secret. npm trusts the top-level workflow's file, not this one,
+# so each package's trusted publisher names the caller's workflow. github/README.md shows a caller.
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: The workspace's root, relative to the repository's.
+        type: string
+        default: .
+      environment:
+        description: >-
+          The GitHub environment the release runs in, which holds RELEASE_DEPLOY_KEY and which npm's trusted publisher
+          names. Keep it to the default branch.
+        type: string
+        default: npm
+      build-command:
+        description: What builds the packages before they're published, run in the working directory.
+        type: string
+        default: pnpm --recursive run --if-present build
+      message:
+        description: The release commit's message.
+        type: string
+        default: "chore(release): publish packages"
+      tag:
+        description: The npm dist-tag the new versions get.
+        type: string
+        default: latest
+      toolchain:
+        description: vite-plus, pnpm, or auto, as the setup action takes it.
+        type: string
+        default: auto
+      dry-run:
+        description: >-
+          Bump the versions in the runner's checkout and report them, without the environment, publishing or pushing.
+          Runs on any branch. The caller still grants id-token: write, which GitHub checks before the run starts.
+        type: boolean
+        default: false
+    secrets:
+      RELEASE_DEPLOY_KEY:
+        description: >-
+          The deploy key's private key, for a caller that passes it. A secret of the same name in the environment takes
+          its place.
+        required: false
+    outputs:
+      packages:
+        description: >-
+          The packages whose version changed, by name: a JSON array of name, from and to. Empty when there were no
+          change files or the run skipped.
+        value: ${{ jobs.release.outputs.packages || '[]' }}
+      published:
+        description:
+          true when the release published and pushed; false with nothing to release, in a dry run, or skipped.
+        value: ${{ jobs.release.outputs.published || 'false' }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release with Beachball
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ !inputs.dry-run && inputs.environment || '' }}
+      deployment: false
+    permissions:
+      contents: read
+      # npm's trusted publishing exchanges the run's OIDC token for a short-lived one, and provenance is signed with it.
+      id-token: write
+    outputs:
+      packages: ${{ steps.release.outputs.packages }}
+      published: ${{ steps.release.outputs.published }}
+    # Releases queue rather than cancel, so one is never cut off between publishing and pushing.
+    concurrency:
+      group:
+        beachball-publish-npm-${{ github.repository }}-${{ inputs.working-directory }}-${{ inputs.dry-run &&
+        github.run_id || 'release' }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      # Provenance names the commit the run started from, and the push has to follow it, so a release runs only on the
+      # default branch's head: a newer commit's own run releases it.
+      - id: ready
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HAS_KEY: ${{ secrets.RELEASE_DEPLOY_KEY != '' }}
+        run: |
+          skip() { echo "::notice::Skipped: $1"; echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ "$DRY_RUN" = true ] && { echo "ready=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            skip "releases run only on $DEFAULT_BRANCH, not $GITHUB_REF."
+          fi
+          [ "$HAS_KEY" = true ] || skip "add the RELEASE_DEPLOY_KEY secret to the environment, a deploy key with write access."
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH" --jq .sha)
+          [ "$head" = "$GITHUB_SHA" ] || skip "$DEFAULT_BRANCH has moved on from ${GITHUB_SHA::7} to ${head::7}, whose own run releases it."
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # A release checks out the branch, not the commit, so Beachball can push to it, with the deploy key as the remote's
+      # credential. A dry run keeps no credentials.
+      - if: steps.ready.outputs.ready == 'true' && !inputs.dry-run
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+      - if: steps.ready.outputs.ready == 'true' && inputs.dry-run
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, pinned to a release's
+      # commit, which Dependabot moves.
+      - if: steps.ready.outputs.ready == 'true'
+        uses: betterapps-hq/pipelines/github/actions/setup@efa1c3e00652cca72174fdf3abdb911a5c501c45 # v1.11.1
+        with:
+          checkout: false
+          working-directory: ${{ inputs.working-directory }}
+          toolchain: ${{ inputs.toolchain }}
+
+      - if: steps.ready.outputs.ready == 'true' && !inputs.dry-run
+        name: Check the checkout is the commit CI passed on
+        working-directory: .
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::notice::Skipped: the branch moved on from ${GITHUB_SHA::7} while this started."
+            echo "skip=true" >> "$GITHUB_ENV"
+          fi
+
+      # The caller's command reaches the shell through env, so the expression isn't spliced into the script.
+      - if: steps.ready.outputs.ready == 'true' && env.skip != 'true'
+        id: release
+        name: Bump, publish and push
+        env:
+          BUILD_COMMAND: ${{ inputs.build-command }}
+          MESSAGE: ${{ inputs.message }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          versions() { pnpm ls --recursive --depth -1 --json | jq -c 'map(select(.name) | {(.name): .version}) | add'; }
+          before=$(versions)
+          change_dir=$(pnpm exec beachball config get changeDir 2> /dev/null | tail -n 1 | tr -d '"')
+          if ! compgen -G "${change_dir:-change}/*.json" > /dev/null; then
+            echo "Nothing to release: no change files." | tee -a "$GITHUB_STEP_SUMMARY"
+            { echo "packages=[]"; echo "published=false"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # beachball publish bumps on a branch of its own and leaves the checkout as it was, so the new versions come
+          # from a bump that's then undone.
+          pnpm exec beachball bump --keep-change-files > /dev/null
+          packages=$(jq -cn --argjson before "$before" --argjson after "$(versions)" \
+            '[$after | to_entries[] | select($before[.key] != .value) | {name: .key, from: $before[.key], to: .value}]
+              | sort_by(.name)')
+          git reset --hard --quiet && git clean -d --force --quiet
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+          if [ "$DRY_RUN" = true ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            heading="## Would release"
+          else
+            eval "$BUILD_COMMAND"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            pnpm exec beachball publish --yes --message "$MESSAGE" --tag "$TAG"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            heading="## Released"
+          fi
+          {
+            echo "$heading"
+            echo
+            jq -r '.[] | "- `\(.name)` \(.from) to \(.to)"' <<< "$packages"
+          } >> "$GITHUB_STEP_SUMMARY"
