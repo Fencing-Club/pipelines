@@ -1022,9 +1022,10 @@ finds no change files and releases nothing.
 | `toolchain`         | `auto`                                    | As the setup action takes it.                                      |
 | `dry-run`           | `false`                                   | Bump and report without publishing or pushing.                     |
 
-Secrets: `RELEASE_DEPLOY_KEY`, from the environment or passed by the caller. Outputs: `packages`, those whose version
-changed, as a JSON array of `name`, `from` and `to`; and `published`. Permissions: `contents: read` and
-`id-token: write`, which the calling job grants.
+Secrets: `RELEASE_DEPLOY_KEY`, from the environment, which the template reads only when the caller passes
+`secrets: inherit`, or passed by the caller. Outputs: `packages`, those whose version changed, as a JSON array of
+`name`, `from` and `to`; and `published`. Permissions: `contents: read` and `id-token: write`, which the calling job
+grants.
 
 ```yaml
 # In the caller's ci.yml, after the jobs that verify main. Each package's trusted publisher names ci.yml.
@@ -1035,6 +1036,8 @@ release:
     contents: read
     id-token: write
   uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@<commit sha> # <version>
+  # A called workflow sees its environment's secrets, such as RELEASE_DEPLOY_KEY, only when the caller inherits them.
+  secrets: inherit
 ```
 
 ## Web apps
