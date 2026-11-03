@@ -146,6 +146,10 @@ jobs:
           MESSAGE: ${{ inputs.message }}
           TAG: ${{ inputs.tag }}
           DRY_RUN: ${{ inputs.dry-run }}
+          # Beachball updates the lockfile on every bump, so after the trial bump is undone pnpm's install state no
+          # longer matches the manifests. Setup already installed from the frozen lockfile, so skip pnpm's check that
+          # would refuse to run scripts in a workspace set to verifyDepsBeforeRun.
+          pnpm_config_verify_deps_before_run: "false"
         run: |
           versions() { pnpm ls --recursive --depth -1 --json | jq -c 'map(select(.name) | {(.name): .version}) | add'; }
           before=$(versions)
