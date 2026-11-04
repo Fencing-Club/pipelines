@@ -94,27 +94,19 @@ and installs its dependencies from the lockfile, with caches.
 - **The install is frozen:** a lockfile that doesn't match `package.json` fails the step.
 - **The checkout keeps no credentials,** so later steps can't push with the job's token. With `lfs`, only the LFS pull
   gets a token, as a header for that one command.
-- **On a Blacksmith runner it checks out with `useblacksmith/checkout`,** Blacksmith's fork of `actions/checkout`, which
-  keeps a mirror of the repository on the runner's disk between runs and fetches only what's new. It's picked where
-  `BLACKSMITH_VM_ID` is set, as Blacksmith's runners set it, and `checkout-action` picks one outright. Caches need
-  nothing of Blacksmith's: its runners serve `actions/cache`, and the setup actions that use it, from their own. The
-  repository borrows the mirror's objects, so a later Docker-based action that runs Git, and can't see the mirror, needs
-  `dissociate`.
 
 | Input               | Default        | What it's for                                                                    |
 | ------------------- | -------------- | -------------------------------------------------------------------------------- |
 | `checkout`          | `true`         | Check out the repository first. Turn it off when the job already has.            |
 | `ref`               | (empty)        | The commit, branch or tag to check out; empty is the one that started the run.   |
 | `fetch-depth`       | `1`            | Commits of history to fetch; `0` fetches all of it, which Beachball needs.       |
-| `checkout-action`   | `auto`         | `actions`, `blacksmith`, or `auto`, which picks `blacksmith` on Blacksmith.      |
-| `dissociate`        | `false`        | Copy Blacksmith's mirrored objects in, for a later Docker-based action's Git.    |
 | `working-directory` | `.`            | The workspace's root, relative to the repository's.                              |
 | `toolchain`         | `auto`         | `vite-plus`, `pnpm`, or `auto`, which looks for `vite-plus` in the workspace.    |
 | `install`           | `true`         | Install the workspace's dependencies, with their cache.                          |
 | `lfs`               | `false`        | Fetch the repository's Git LFS objects, cached until one changes.                |
 | `token`             | `github.token` | The token Git LFS fetches with, for a private repository; only the pull gets it. |
 
-Outputs: `toolchain`, the one it set up, and `checkout-action`, the action that checked out, empty when it didn't.
+Output: `toolchain`, the one it set up.
 
 Permissions: `contents: read`.
 
@@ -274,29 +266,28 @@ A reusable workflow. It runs the workspace's `pnpm verify` on each operating sys
 of its own, so one failing doesn't stop the others. A newer push to the same branch or pull request cancels the run
 before it.
 
-| Input                     | Default             | What it's for                                                                            |
-| ------------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| `os`                      | `["ubuntu-latest"]` | The runners to verify on, as a JSON array of labels.                                     |
-| `command`                 | `pnpm verify`       | What verifies the workspace.                                                             |
-| `working-directory`       | `.`                 | The workspace's root, relative to the repository's.                                      |
-| `prepare`                 | (empty)             | Shell commands run after the install and before `command`.                               |
-| `cache-path`              | (empty)             | More paths to cache, one per line, relative to the repository: what `prepare` installs.  |
-| `cache-key-files`         | (empty)             | A glob of the files that key that cache, relative to the repository.                     |
-| `fetch-depth`             | `1`                 | Commits of history to fetch; `0` for Beachball's checks.                                 |
-| `lfs`                     | `false`             | Fetch the repository's Git LFS objects, cached until one changes.                        |
-| `toolchain`               | `auto`              | As the setup action takes it.                                                            |
-| `checkout-action`         | `auto`              | As the setup action takes it: Blacksmith's checkout on Blacksmith's runners with `auto`. |
-| `timeout-minutes`         | `30`                | How long each runner gets.                                                               |
-| `cancel-in-progress`      | `true`              | Cancel an older run on the same branch or pull request.                                  |
-| `concurrency-key`         | (empty)             | What runs are grouped by in place of the branch or pull request, such as the run's ID.   |
-| `env`                     | (empty)             | `NAME=value` lines set before the install, for every step. Not for secrets.              |
-| `node-options`            | (empty)             | `NODE_OPTIONS` for `prepare` and `command`, such as `--max-old-space-size=8192`.         |
-| `vite-task-cache`         | `false`             | Keep Vite+'s task cache between runs, restored from the newest. Only `vp run` uses it.   |
-| `vite-task-cache-key`     | `verify`            | Tells this call's task caches from another call's on the same system and workspace.      |
-| `artifact-path`           | (empty)             | Paths to upload once `command` passes, one per line, relative to the repository.         |
-| `artifact-name`           | `build`             | The artifact's name.                                                                     |
-| `artifact-os`             | (empty)             | The runner in `os` that uploads it; empty for the first in `os`.                         |
-| `artifact-retention-days` | `0`                 | Days the artifact is kept; `0` for the repository's setting.                             |
+| Input                     | Default             | What it's for                                                                           |
+| ------------------------- | ------------------- | --------------------------------------------------------------------------------------- |
+| `os`                      | `["ubuntu-latest"]` | The runners to verify on, as a JSON array of labels.                                    |
+| `command`                 | `pnpm verify`       | What verifies the workspace.                                                            |
+| `working-directory`       | `.`                 | The workspace's root, relative to the repository's.                                     |
+| `prepare`                 | (empty)             | Shell commands run after the install and before `command`.                              |
+| `cache-path`              | (empty)             | More paths to cache, one per line, relative to the repository: what `prepare` installs. |
+| `cache-key-files`         | (empty)             | A glob of the files that key that cache, relative to the repository.                    |
+| `fetch-depth`             | `1`                 | Commits of history to fetch; `0` for Beachball's checks.                                |
+| `lfs`                     | `false`             | Fetch the repository's Git LFS objects, cached until one changes.                       |
+| `toolchain`               | `auto`              | As the setup action takes it.                                                           |
+| `timeout-minutes`         | `30`                | How long each runner gets.                                                              |
+| `cancel-in-progress`      | `true`              | Cancel an older run on the same branch or pull request.                                 |
+| `concurrency-key`         | (empty)             | What runs are grouped by in place of the branch or pull request, such as the run's ID.  |
+| `env`                     | (empty)             | `NAME=value` lines set before the install, for every step. Not for secrets.             |
+| `node-options`            | (empty)             | `NODE_OPTIONS` for `prepare` and `command`, such as `--max-old-space-size=8192`.        |
+| `vite-task-cache`         | `false`             | Keep Vite+'s task cache between runs, restored from the newest. Only `vp run` uses it.  |
+| `vite-task-cache-key`     | `verify`            | Tells this call's task caches from another call's on the same system and workspace.     |
+| `artifact-path`           | (empty)             | Paths to upload once `command` passes, one per line, relative to the repository.        |
+| `artifact-name`           | `build`             | The artifact's name.                                                                    |
+| `artifact-os`             | (empty)             | The runner in `os` that uploads it; empty for the first in `os`.                        |
+| `artifact-retention-days` | `0`                 | Days the artifact is kept; `0` for the repository's setting.                            |
 
 | Secret                             | What it's for                                                                    |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
