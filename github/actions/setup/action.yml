@@ -74,7 +74,7 @@ runs:
       shell: bash
       run: git config --global core.autocrlf false
     - if: steps.checkout.outputs.action == 'actions'
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      uses: actions/checkout@v7
       with:
         ref: ${{ inputs.ref }}
         fetch-depth: ${{ inputs.fetch-depth }}
@@ -83,7 +83,7 @@ runs:
     # the repository kept on the runner's disk and refreshes it after the job; anywhere else it checks out as
     # actions/checkout does. Caches need nothing of Blacksmith's: its runners serve actions/cache's from their own.
     - if: steps.checkout.outputs.action == 'blacksmith'
-      uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
+      uses: useblacksmith/checkout@v1
       with:
         ref: ${{ inputs.ref }}
         fetch-depth: ${{ inputs.fetch-depth }}
@@ -124,7 +124,7 @@ runs:
         echo "hash=$hash" >> "$GITHUB_OUTPUT"
         echo "path=$(git lfs env | sed -n 's/^LocalMediaDir=//p')" >> "$GITHUB_OUTPUT"
     - if: inputs.lfs == 'true'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6
       with:
         path: ${{ steps.lfs.outputs.path }}
         key: lfs-${{ runner.os }}-${{ steps.lfs.outputs.hash }}
@@ -167,7 +167,7 @@ runs:
     # Vite+ installs Node and the package manager itself, and caches the dependencies. Its relative paths are the
     # working directory's, and its install is frozen on CI.
     - if: steps.toolchain.outputs.toolchain == 'vite-plus'
-      uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+      uses: voidzero-dev/setup-vp@v1
       with:
         working-directory: ${{ inputs.working-directory }}
         node-version-file: .nvmrc
@@ -176,11 +176,11 @@ runs:
 
     # pnpm comes first, so setup-node can find its store to cache. Its version is package.json's packageManager.
     - if: steps.toolchain.outputs.toolchain == 'pnpm'
-      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      uses: pnpm/action-setup@v6
       with:
         package_json_file: ${{ inputs.working-directory }}/package.json
     - if: steps.toolchain.outputs.toolchain == 'pnpm'
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      uses: actions/setup-node@v7
       with:
         node-version-file: ${{ inputs.working-directory }}/.nvmrc
         # A job that doesn't install has no store to restore or save, and setup-node mustn't guess a cache of its own.

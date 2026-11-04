@@ -110,10 +110,9 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       # Finding the packages only reads package.json files and the registry, so only a dry run, which builds, installs.
-      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, pinned to a release's
-      # commit, which Dependabot moves.
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
       - if: steps.ready.outputs.ready == 'true'
-        uses: betterapps-hq/pipelines/github/actions/setup@0b0ed2e646a72e6db61a303cee36127aa5e17a48 # v1.3.1
+        uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           working-directory: ${{ inputs.working-directory }}
           toolchain: ${{ inputs.toolchain }}
@@ -244,7 +243,7 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@0b0ed2e646a72e6db61a303cee36127aa5e17a48 # v1.3.1
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           working-directory: ${{ inputs.working-directory }}
           toolchain: ${{ inputs.toolchain }}

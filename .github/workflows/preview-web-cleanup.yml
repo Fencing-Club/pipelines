@@ -120,7 +120,7 @@ jobs:
 
       # The default branch's code, since a closed pull request's may not be safe to run.
       - if: steps.closed.outputs.closed == 'true' && inputs.delete-command != ''
-        uses: betterapps-hq/pipelines/github/actions/setup@0b0ed2e646a72e6db61a303cee36127aa5e17a48 # v1.3.1
+        uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           ref: ${{ github.event.repository.default_branch }}
           working-directory: ${{ inputs.working-directory }}
@@ -164,7 +164,7 @@ jobs:
         run: eval "$COMMAND"
 
       - if: steps.closed.outputs.closed == 'true' && inputs.delete-command == ''
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
       # A pull request closed before its preview was published has nothing to delete. While the Worker is being

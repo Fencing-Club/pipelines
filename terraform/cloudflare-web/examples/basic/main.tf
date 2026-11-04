@@ -46,8 +46,8 @@ variable "worker_secrets" {
 }
 
 module "web" {
-  # A caller outside this repository pins a commit:
-  # source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/cloudflare-web?ref=<commit sha>"
+  # A caller outside this repository uses main:
+  # source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/cloudflare-web?ref=main"
   source = "../.."
 
   account_id  = "0123456789abcdef0123456789abcdef"

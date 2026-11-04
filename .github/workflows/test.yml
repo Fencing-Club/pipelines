@@ -20,7 +20,7 @@ jobs:
     name: Lint the workflows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: docker://rhysd/actionlint:1.7.12
@@ -63,7 +63,7 @@ jobs:
         example: [pnpm, vite-plus]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - id: setup
@@ -98,7 +98,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # A pull request's head rather than the merge commit the run starts from, so it's only checked out if ref arrives.
@@ -225,7 +225,7 @@ jobs:
         env:
           NAME: ${{ needs.ci-verify-artifact.outputs.artifact-name }}
         run: test "$NAME" = test-build
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.ci-verify-artifact.outputs.artifact-name }}
           path: examples/pnpm/dist
@@ -249,7 +249,7 @@ jobs:
     env:
       NO_COLOR: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./github/actions/setup
@@ -290,7 +290,7 @@ jobs:
     env:
       NO_COLOR: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./github/actions/setup
@@ -399,7 +399,7 @@ jobs:
     needs: desktop-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Check the dry-run output
@@ -676,7 +676,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - id: comment
@@ -694,10 +694,10 @@ jobs:
     name: Validate the Terraform modules
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.16.6
           terraform_wrapper: false

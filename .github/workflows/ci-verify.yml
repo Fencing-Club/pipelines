@@ -170,9 +170,8 @@ jobs:
             echo "$line" >> "$GITHUB_ENV"
           done <<< "$LINES"
 
-      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, pinned to a release's
-      # commit, which Dependabot moves.
-      - uses: betterapps-hq/pipelines/github/actions/setup@efa1c3e00652cca72174fdf3abdb911a5c501c45 # v1.11.1
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           checkout-action: ${{ inputs.checkout-action }}
           fetch-depth: ${{ inputs.fetch-depth }}
@@ -180,13 +179,13 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           toolchain: ${{ inputs.toolchain }}
       - if: inputs.cache-path != ''
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6
         with:
           path: ${{ inputs.cache-path }}
           key: ci-verify-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(inputs.cache-key-files) }}
       # Restored from the newest cache for this key, then saved under this run when every step passes.
       - if: inputs.vite-task-cache
-        uses: betterapps-hq/pipelines/github/actions/vite-task-cache@5bcd824813220f0b3a6bafa3b6a809725a5b686d # v1.5.0
+        uses: betterapps-hq/pipelines/github/actions/vite-task-cache@main
         with:
           working-directory: ${{ inputs.working-directory }}
           key: ${{ inputs.vite-task-cache-key }}
@@ -215,7 +214,7 @@ jobs:
       # upload-artifact takes them. overwrite lets a re-run replace what its earlier attempt uploaded.
       - id: upload
         if: inputs.artifact-path != '' && matrix.os == (inputs.artifact-os || fromJSON(inputs.os)[0])
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
           path: ${{ inputs.artifact-path }}

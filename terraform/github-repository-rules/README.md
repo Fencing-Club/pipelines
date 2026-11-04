@@ -121,7 +121,7 @@ provider "github" {
 }
 
 module "rules" {
-  source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/github-repository-rules?ref=<commit sha>" # <version>
+  source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/github-repository-rules?ref=main"
 
   repository      = "parity"
   required_checks = ["Tests pass", "CodeRabbit"]

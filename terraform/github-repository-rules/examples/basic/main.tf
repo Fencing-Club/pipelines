@@ -28,8 +28,8 @@ provider "github" {
 }
 
 module "rules" {
-  # A caller outside this repository pins a commit:
-  # source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/github-repository-rules?ref=<commit sha>"
+  # A caller outside this repository uses main:
+  # source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/github-repository-rules?ref=main"
   source = "../.."
 
   repository      = "pipelines"

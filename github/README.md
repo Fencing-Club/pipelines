@@ -9,13 +9,13 @@ commit, even if the branch moves while installers build. Manual retries require 
 on the selected default-branch commit. Version changes trigger automatic delivery; a manual retry can publish an
 existing version that has no release yet. Published releases are skipped; interrupted draft uploads can be retried.
 
-The caller grants `contents: write` and `actions: read`, keeps its trigger on the default branch, and pins a released
-template commit. `working-directory` defaults to `.`, `app-directory` to `apps/desktop`, `build-command` to
-`pnpm build`, `package-command` to `pnpm exec electron-builder --publish never` (in the app folder),
-`artifact-directory` to `dist`, and `ci-workflow` to `ci.yml`. `os` is a JSON array, defaulting to all three hosted
-operating systems. `dry-run: true` builds and collects artifacts without creating a tag or release. Outputs are
-`version` and `published`. Configure an electron-builder `artifactName` without spaces or repeated dots, such as
-`App-${version}-${os}-${arch}.${ext}`: GitHub must preserve names in both update metadata and the release manifest.
+The caller grants `contents: write` and `actions: read`, keeps its trigger on the default branch, and calls the template
+at `main`. `working-directory` defaults to `.`, `app-directory` to `apps/desktop`, `build-command` to `pnpm build`,
+`package-command` to `pnpm exec electron-builder --publish never` (in the app folder), `artifact-directory` to `dist`,
+and `ci-workflow` to `ci.yml`. `os` is a JSON array, defaulting to all three hosted operating systems. `dry-run: true`
+builds and collects artifacts without creating a tag or release. Outputs are `version` and `published`. Configure an
+electron-builder `artifactName` without spaces or repeated dots, such as `App-${version}-${os}-${arch}.${ext}`: GitHub
+must preserve names in both update metadata and the release manifest.
 
 An optional named secret `BUILD_SECRET` can supply one build setting; `build-secret-env` names its environment variable.
 For example, Parity forwards its tldraw key and sets the name to `VITE_TLDRAW_LICENSE_KEY`. No signing credentials are
@@ -56,7 +56,7 @@ jobs:
     permissions:
       contents: write
       actions: read
-    uses: betterapps-hq/pipelines/.github/workflows/cd-desktop-release.yml@c2e002c29b8f1d8eee612805e9aa715c61dcb7e4 # v1.11.0
+    uses: betterapps-hq/pipelines/.github/workflows/cd-desktop-release.yml@main
     with:
       build-secret-env: VITE_TLDRAW_LICENSE_KEY
     secrets:
@@ -65,7 +65,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'promote'
     permissions:
       contents: write
-    uses: betterapps-hq/pipelines/.github/workflows/cd-desktop-promote.yml@c2e002c29b8f1d8eee612805e9aa715c61dcb7e4 # v1.11.0
+    uses: betterapps-hq/pipelines/.github/workflows/cd-desktop-promote.yml@main
     with:
       version: ${{ inputs.version }}
       environment: production
@@ -74,10 +74,10 @@ jobs:
 Composite actions live here, in `actions/<name>/action.yml`. Reusable workflows live in the repository's own
 `.github/workflows/`, since GitHub calls them from nowhere else. Both are documented here.
 
-Pin every call to a full commit SHA, with the version in a comment:
+Call every template at `main`, so each change reaches every repository as soon as it merges:
 
 ```yaml
-uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@<commit sha> # v1.2.0
+uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
 ```
 
 ## setup
@@ -122,7 +122,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@<commit sha> # v1.2.0
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
       - run: pnpm test:integration
 ```
 
@@ -220,11 +220,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@<commit sha> # <version>
-      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@<commit sha> # <version>
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
+      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@main
       # A task in vite.config.ts, so it's cached; a package.json script would need vp run --cache build.
       - run: vp run build
-      - uses: actions/upload-artifact@<commit sha> # v7
+      - uses: actions/upload-artifact@v7
         with:
           name: build
           path: dist
@@ -247,8 +247,8 @@ jobs:
   types:
     runs-on: ubuntu-latest
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@<commit sha> # <version>
-      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@<commit sha> # <version>
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
+      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@main
       - run: vp run -r typecheck
   e2e:
     strategy:
@@ -257,8 +257,8 @@ jobs:
         shard: [1, 2]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@<commit sha> # <version>
-      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@<commit sha> # <version>
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
+      - uses: betterapps-hq/pipelines/github/actions/vite-task-cache@main
         with:
           # Two shards run on each system, so each keeps a cache of its own.
           key: e2e-${{ matrix.shard }}
@@ -327,7 +327,7 @@ Permissions: `contents: read`.
 ```yaml
 jobs:
   ci-verify:
-    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
   # Keeps the "verify" check that branch protection requires.
   verify:
     needs: ci-verify
@@ -352,7 +352,7 @@ permissions:
 
 jobs:
   verify:
-    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
     with:
       os: '["ubuntu-latest", "windows-latest", "macos-latest"]'
       # Parity's tests need its fixture projects installed, each with its own package manager.
@@ -388,7 +388,7 @@ with `actions/download-artifact` instead of building it again.
 ```yaml
 jobs:
   verify:
-    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@<commit sha> # v1.10.0
+    uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
     with:
       # pnpm verify builds the client into apps/client/dist.
       artifact-path: apps/client/dist
@@ -399,10 +399,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@<commit sha> # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@<commit sha> # v8.0.2
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.verify.outputs.artifact-name }}
           path: apps/client/dist
@@ -464,7 +464,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@main
     with:
       environment: preview
       preview-name: pr-${{ github.event.pull_request.number }}
@@ -478,21 +478,21 @@ jobs:
   build-storybook:
     runs-on: ubuntu-latest
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@<commit sha> # v1.2.0
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
       - run: pnpm --filter web build-storybook
-      - uses: actions/upload-artifact@<commit sha> # v7
+      - uses: actions/upload-artifact@v7
         with:
           name: storybook
           path: apps/web/storybook-static
   staging:
     needs: build-storybook
-    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@main
     with:
       environment: staging
       artifact: storybook
   production:
     needs: staging
-    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@main
     with:
       environment: production
       artifact: storybook
@@ -529,7 +529,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/unpublish-storybook.yml@<commit sha> # v1.2.0
+    uses: betterapps-hq/pipelines/.github/workflows/unpublish-storybook.yml@main
     with:
       preview-name: pr-${{ github.event.pull_request.number }}
       working-directory: apps/desktop
@@ -618,7 +618,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/terraform-plan.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/terraform-plan.yml@main
     with:
       working-directory: infra
       state-bucket: ${{ vars.TF_STATE_BUCKET }}
@@ -633,7 +633,7 @@ jobs:
   # Configure infrastructure to allow only main. Environment secrets override these forwarded organization/repo secrets.
   apply:
     if: github.event_name == 'push'
-    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@main
     with:
       environment: infrastructure
       working-directory: infra
@@ -662,7 +662,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/terraform-plan.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/terraform-plan.yml@main
     with:
       working-directory: apps/copacker/infra/${{ matrix.project }}
       fmt-path: ..
@@ -675,7 +675,7 @@ jobs:
 
   staging:
     if: github.event_name == 'push'
-    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@main
     with:
       environment: infrastructure
       working-directory: apps/copacker/infra/staging
@@ -689,7 +689,7 @@ jobs:
 
   production:
     needs: staging
-    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/terraform-apply.yml@main
     with:
       environment: infrastructure
       working-directory: apps/copacker/infra/production
@@ -832,7 +832,7 @@ jobs:
   prepare:
     # CI's runs for pushes to main only, never a pull request's branch that happens to be called main.
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
-    uses: betterapps-hq/pipelines/.github/workflows/release-prepare.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/release-prepare.yml@main
     with:
       app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
     # Secrets go by name, so a repository with a token instead passes RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }} and
@@ -842,7 +842,7 @@ jobs:
   merge:
     needs: prepare
     if: needs.prepare.outputs.pull-request != ''
-    uses: betterapps-hq/pipelines/.github/workflows/release-merge.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/release-merge.yml@main
     with:
       pull-request: ${{ fromJSON(needs.prepare.outputs.pull-request) }}
       head-sha: ${{ needs.prepare.outputs.head-sha }}
@@ -987,7 +987,7 @@ jobs:
       contents: read
       actions: read
       id-token: write
-    uses: betterapps-hq/pipelines/.github/workflows/cd-npm-publish.yml@<commit sha> # <version>
+    uses: betterapps-hq/pipelines/.github/workflows/cd-npm-publish.yml@main
     with:
       # Parity's desktop app is versioned but not published, so only packages with a publishConfig go.
       require-publish-config: true
@@ -1036,7 +1036,7 @@ release:
   permissions:
     contents: read
     id-token: write
-  uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@<commit sha> # <version>
+  uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@main
   # A called workflow sees its environment's secrets, such as RELEASE_DEPLOY_KEY, only when the caller inherits them.
   secrets: inherit
 ```
@@ -1133,7 +1133,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/preview-web.yml@<commit sha> # v1.4.0
+    uses: betterapps-hq/pipelines/.github/workflows/preview-web.yml@main
     with:
       build-command: pnpm --filter web build
       app-directory: apps/web
@@ -1185,7 +1185,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/preview-web-cleanup.yml@<commit sha> # v1.4.0
+    uses: betterapps-hq/pipelines/.github/workflows/preview-web-cleanup.yml@main
     with:
       app-directory: apps/web
       neon: true
@@ -1287,7 +1287,7 @@ permissions:
 jobs:
   staging:
     if: github.event_name == 'push'
-    uses: betterapps-hq/pipelines/.github/workflows/cd-web-deploy.yml@<commit sha> # v1.4.0
+    uses: betterapps-hq/pipelines/.github/workflows/cd-web-deploy.yml@main
     with:
       environment: staging
       build-command: CLOUDFLARE_ENV=staging pnpm --filter web build
@@ -1301,7 +1301,7 @@ jobs:
     permissions:
       contents: read
       deployments: read
-    uses: betterapps-hq/pipelines/.github/workflows/cd-web-promote.yml@<commit sha> # v1.4.0
+    uses: betterapps-hq/pipelines/.github/workflows/cd-web-promote.yml@main
     with:
       commit: ${{ inputs.commit }}
       build-command: pnpm --filter web build
@@ -1338,7 +1338,7 @@ Secrets: `api-key` is one, passed from the caller's secrets. Permissions: none; 
 
 ```yaml
 - id: database
-  uses: betterapps-hq/pipelines/github/actions/neon-branch@<commit sha> # v1.4.0
+  uses: betterapps-hq/pipelines/github/actions/neon-branch@main
   with:
     api-key: ${{ secrets.NEON_API_KEY }}
     project-id: ${{ vars.NEON_PROJECT_ID }}
@@ -1371,7 +1371,7 @@ Secrets: `token`, which is `github.token` unless the caller passes another from 
 `pull-requests: write`.
 
 ```yaml
-- uses: betterapps-hq/pipelines/github/actions/pr-comment@<commit sha> # v1.4.0
+- uses: betterapps-hq/pipelines/github/actions/pr-comment@main
   with:
     marker: "<!-- coverage -->"
     body: "**Coverage:** ${{ steps.coverage.outputs.percent }}%"
