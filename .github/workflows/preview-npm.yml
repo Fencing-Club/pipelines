@@ -71,7 +71,7 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/setup@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+      - uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           working-directory: ${{ inputs.working-directory }}
           toolchain: ${{ inputs.toolchain }}
@@ -150,7 +150,7 @@ jobs:
 
       # One comment per workflow, found by its marker, which later runs edit.
       - if: steps.publish.outputs.published == 'true' && inputs.comment && github.event_name == 'pull_request'
-        uses: betterapps-hq/pipelines/github/actions/pr-comment@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+        uses: betterapps-hq/pipelines/github/actions/pr-comment@main
         with:
           marker: "<!-- preview-npm ${{ inputs.working-directory }} -->"
           body: ${{ steps.describe.outputs.markdown }}
