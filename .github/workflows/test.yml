@@ -54,12 +54,12 @@ jobs:
             rm "$output"
           done
           # A project's provider credentials: with the environment enabled, a missing one skips the apply too.
-          for has in true false; do
+          for provided in true false; do
             output=$(mktemp)
             TEST_MARKER=true HAS_STATE_CREDENTIALS=true GH_TOKEN=unused ENVIRONMENT='test/room space' \
-              CREDENTIALS=CLOUDFLARE_API_TOKEN HAS_CLOUDFLARE_API_TOKEN="$has" \
+              CREDENTIALS=CLOUDFLARE_API_TOKEN HAS_CLOUDFLARE_API_TOKEN="$provided" \
               GITHUB_REPOSITORY=example/repository GITHUB_OUTPUT="$output" run_gate
-            if [ "$has" = true ]; then
+            if [ "$provided" = true ]; then
               grep -qx 'ready=true' "$output"
             else
               grep -qx 'result=skipped' "$output"
