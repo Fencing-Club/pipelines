@@ -16,12 +16,27 @@ permissions:
   contents: read
 
 jobs:
-  promote:
+  # A job waiting on its environment's reviewers already holds its concurrency group, so the approval waits here,
+  # outside cd-desktop-publish. A promotion still waiting for approval then can't hold up the next beta's publish.
+  approve:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     environment:
       name: ${{ inputs.environment }}
       url: https://github.com/${{ github.repository }}/releases/tag/v${{ inputs.version }}
+    permissions: {}
+    steps:
+      - name: Record the approval
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          VERSION: ${{ inputs.version }}
+        run: echo "Promotion of v$VERSION approved for $ENVIRONMENT." >> "$GITHUB_STEP_SUMMARY"
+
+  # Only an approved promotion takes the lock, so it and publishing still run one at a time.
+  promote:
+    needs: approve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     concurrency:
