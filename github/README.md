@@ -1142,7 +1142,12 @@ finds no change files and releases nothing.
   the environment's `RELEASE_DEPLOY_KEY` secret. Without it, the run skips with a notice.
 - **It releases the commit CI passed on,** and only while that's still the default branch's head. A newer commit's run
   releases that one.
-- **With no change files,** it builds and publishes nothing.
+- **With no change files,** or none that bump a package in scope, it builds and publishes nothing.
+- **A scope splits a workspace's releases.** Beachball bumps only the packages whose paths match `scope`, one glob a
+  line, and leaves the other change files for a run of their own. Parity releases its CLI with `!apps/desktop`, and
+  versions its desktop app with `apps/desktop`.
+- **`publish: false` only versions:** it bumps, commits, tags and pushes, without building or npm. Beachball publishes
+  every package it versions, so this is how it versions what ships somewhere else, such as a desktop app.
 - **What npm needs** is as for `cd-npm-publish`: each package's trusted publisher names the caller's workflow file and
   the environment, a first version published by hand, and a `repository.url` that matches the repository. Beachball
   turns `workspace:` and `catalog:` ranges into versions as it publishes.
@@ -1156,6 +1161,8 @@ finds no change files and releases nothing.
 | `message`           | `chore(release): publish packages`        | The release commit's message.                                      |
 | `tag`               | `latest`                                  | The npm dist-tag the new versions get.                             |
 | `toolchain`         | `auto`                                    | As the setup action takes it.                                      |
+| `scope`             | every package                             | Globs of the package paths to release, one a line.                 |
+| `publish`           | `true`                                    | `false` versions and pushes without building or publishing.        |
 | `dry-run`           | `false`                                   | Bump and report without publishing or pushing.                     |
 
 Secrets: `RELEASE_DEPLOY_KEY`, from the environment, which the template reads only when the caller passes

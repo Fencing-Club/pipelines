@@ -583,9 +583,43 @@ jobs:
       working-directory: examples/release
       dry-run: true
 
+  # Scoped as Parity splits its CLI's release from its desktop app's: two globs leave the app out, and one takes only it.
+  beachball-publish-npm-without-app:
+    name: beachball-publish-npm (dry run, without the app)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/beachball-publish-npm.yml
+    with:
+      working-directory: examples/release
+      scope: |
+        packages/*
+        !packages/app
+      dry-run: true
+
+  beachball-publish-npm-app:
+    name: beachball-publish-npm (dry run, the app unpublished)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/beachball-publish-npm.yml
+    with:
+      working-directory: examples/release
+      scope: packages/app
+      publish: false
+      dry-run: true
+
   release-checked:
     name: Check the release dry runs
-    needs: [release-prepare, cd-npm-publish, cd-npm-publish-public, beachball-publish-npm]
+    needs:
+      [
+        release-prepare,
+        cd-npm-publish,
+        cd-npm-publish-public,
+        beachball-publish-npm,
+        beachball-publish-npm-without-app,
+        beachball-publish-npm-app
+      ]
     runs-on: ubuntu-latest
     steps:
       - env:
@@ -597,6 +631,8 @@ jobs:
           PUBLISHED: ${{ needs.cd-npm-publish.outputs.published }} ${{ needs.cd-npm-publish-public.outputs.published }}
           BEACHBALL: ${{ needs.beachball-publish-npm.outputs.packages }}
           BEACHBALL_PUBLISHED: ${{ needs.beachball-publish-npm.outputs.published }}
+          WITHOUT_APP: ${{ needs.beachball-publish-npm-without-app.outputs.packages }}
+          APP: ${{ needs.beachball-publish-npm-app.outputs.packages }}
         run: |
           set -x
           test "$TITLE" = "chore(release): @pipelines-example/app@1.0.1 and 2 more"
@@ -612,6 +648,9 @@ jobs:
           test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$BEACHBALL")" = \
             "@pipelines-example/app@1.0.0->1.0.1 @pipelines-example/cli@1.0.0->1.0.1 @pipelines-example/core@1.0.0->1.1.0"
           test "$BEACHBALL_PUBLISHED" = false
+          test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$WITHOUT_APP")" = \
+            "@pipelines-example/cli@1.0.0->1.0.1 @pipelines-example/core@1.0.0->1.1.0"
+          test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$APP")" = "@pipelines-example/app@1.0.0->1.0.1"
 
   # The web templates skip with a notice too. web-test exists only for that, and the commands fail if they run.
   preview-web:
@@ -852,6 +891,8 @@ jobs:
       - cd-npm-publish
       - cd-npm-publish-public
       - beachball-publish-npm
+      - beachball-publish-npm-without-app
+      - beachball-publish-npm-app
       - desktop-release
       - desktop-checked
       - release-checked
