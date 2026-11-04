@@ -609,6 +609,31 @@ jobs:
       publish: false
       dry-run: true
 
+  # The stage templates a repository that ships packages and a desktop app calls from cd-npm.yml and cd-desktop.yml.
+  cd-npm-release:
+    name: cd-npm-release (dry run, without the app)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-npm-release.yml
+    with:
+      working-directory: examples/release
+      scope: "!packages/app"
+      dry-run: true
+
+  cd-desktop-version:
+    name: cd-desktop-version (dry run)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-desktop-version.yml
+    with:
+      working-directory: examples/release
+      # A block, so the scope (packages/app with a newline) and its concurrency group differ from the dry run above's.
+      scope: |
+        packages/app
+      dry-run: true
+
   release-checked:
     name: Check the release dry runs
     needs:
@@ -618,7 +643,9 @@ jobs:
         cd-npm-publish-public,
         beachball-publish-npm,
         beachball-publish-npm-without-app,
-        beachball-publish-npm-app
+        beachball-publish-npm-app,
+        cd-npm-release,
+        cd-desktop-version
       ]
     runs-on: ubuntu-latest
     steps:
@@ -633,6 +660,9 @@ jobs:
           BEACHBALL_PUBLISHED: ${{ needs.beachball-publish-npm.outputs.published }}
           WITHOUT_APP: ${{ needs.beachball-publish-npm-without-app.outputs.packages }}
           APP: ${{ needs.beachball-publish-npm-app.outputs.packages }}
+          NPM_RELEASE: ${{ needs.cd-npm-release.outputs.packages }}
+          DESKTOP_VERSION: ${{ needs.cd-desktop-version.outputs.packages }}
+          STAGE_PUSHED: ${{ needs.cd-npm-release.outputs.published }} ${{ needs.cd-desktop-version.outputs.versioned }}
         run: |
           set -x
           test "$TITLE" = "chore(release): @pipelines-example/app@1.0.1 and 2 more"
@@ -651,6 +681,11 @@ jobs:
           test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$WITHOUT_APP")" = \
             "@pipelines-example/cli@1.0.0->1.0.1 @pipelines-example/core@1.0.0->1.1.0"
           test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$APP")" = "@pipelines-example/app@1.0.0->1.0.1"
+          test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$NPM_RELEASE")" = \
+            "@pipelines-example/cli@1.0.0->1.0.1 @pipelines-example/core@1.0.0->1.1.0"
+          test "$(jq -r 'map("\(.name)@\(.from)->\(.to)") | join(" ")' <<< "$DESKTOP_VERSION")" = \
+            "@pipelines-example/app@1.0.0->1.0.1"
+          test "$STAGE_PUSHED" = "false false"
 
   # The web templates skip with a notice too. web-test exists only for that, and the commands fail if they run.
   preview-web:
@@ -893,6 +928,8 @@ jobs:
       - beachball-publish-npm
       - beachball-publish-npm-without-app
       - beachball-publish-npm-app
+      - cd-npm-release
+      - cd-desktop-version
       - desktop-release
       - desktop-checked
       - release-checked

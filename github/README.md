@@ -1130,6 +1130,63 @@ jobs:
       ci-workflow: ci.yml
 ```
 
+## cd-npm-release and cd-desktop-version
+
+Reusable workflows for a workspace that ships npm packages and a desktop app, such as Parity, so each ships in a
+pipeline of its own: `cd-npm.yml` releases the packages and `cd-desktop.yml` versions and delivers the app. Both run
+`beachball-publish-npm`, below, once CI passes on the default branch, and each leaves the other's change files alone, so
+neither release holds up the other. A workspace that only publishes packages, such as Buildkit, can call
+`beachball-publish-npm` from its `ci.yml` instead.
+
+- **`cd-npm-release`** bumps the packages in `scope` from their change files, publishes them to npm, then commits, tags
+  and pushes, all in one job. npm's trusted publisher for each package names `cd-npm.yml` and the `npm` environment.
+- **`cd-desktop-version`** bumps only the app, in `scope` (`apps/desktop` by default), then commits, tags and pushes,
+  without npm. CI's run on that commit starts `cd-desktop.yml` again, where `cd-desktop-release` publishes the new
+  version.
+- **Each checks the run itself:** it goes ahead only for CI's successful run on a push, never a pull request's, and only
+  while that commit is still the default branch's head. A caller needs no `if`.
+- **Each needs a deploy key** in its environment's `RELEASE_DEPLOY_KEY` secret: `npm` for the packages, `desktop` for
+  the app, both kept to the default branch. The inputs are `beachball-publish-npm`'s, apart from `publish`.
+
+| Output      | Of                   | What it is                                                    |
+| ----------- | -------------------- | ------------------------------------------------------------- |
+| `packages`  | both                 | The versions that changed, as a JSON array of name, from, to. |
+| `published` | `cd-npm-release`     | true when the release published and pushed.                   |
+| `versioned` | `cd-desktop-version` | true when a new version of the app was committed and pushed.  |
+
+```yaml
+# cd-npm.yml. npm's trusted publisher names this file and the npm environment.
+name: CD npm
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: read
+      id-token: write
+    uses: betterapps-hq/pipelines/.github/workflows/cd-npm-release.yml@main
+    with:
+      scope: "!apps/desktop"
+    secrets:
+      RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
+```
+
+```yaml
+# In cd-desktop.yml, on the same workflow_run trigger, beside cd-desktop-release and cd-desktop-promote.
+version:
+  permissions:
+    contents: read
+    id-token: write
+  uses: betterapps-hq/pipelines/.github/workflows/cd-desktop-version.yml@main
+  secrets:
+    RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
+```
+
 ## beachball-publish-npm
 
 A reusable workflow. It releases a workspace's Beachball change files in one job, with no release pull request:

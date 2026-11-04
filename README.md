@@ -38,6 +38,8 @@ fix lands in one place instead of being copied between repositories.
 | `.github/workflows/release-merge.yml`         | Reusable workflow | Merges the release pull request through auto-merge once `main`'s rules are met                              |
 | `.github/workflows/cd-npm-publish.yml`        | Reusable workflow | Publishes the packages whose versions npm doesn't have, through trusted publishing with provenance          |
 | `.github/workflows/beachball-publish-npm.yml` | Reusable workflow | Bumps, publishes and pushes a release in one job with `beachball publish`, pushing with a deploy key        |
+| `.github/workflows/cd-npm-release.yml`        | Reusable workflow | A `cd-npm.yml`'s release once CI passes: `beachball-publish-npm` for the packages, apart from a desktop app |
+| `.github/workflows/cd-desktop-version.yml`    | Reusable workflow | A `cd-desktop.yml`'s version bump once CI passes: `beachball-publish-npm` for the app, without npm          |
 | `.github/workflows/cd-web-deploy.yml`         | Reusable workflow | Builds, migrates and deploys a web app to the environment the caller names, such as staging                 |
 | `.github/workflows/cd-web-promote.yml`        | Reusable workflow | Deploys the commit staging has to production, once production's protection rules let it                     |
 | `terraform/cloudflare-storybook`              | Terraform module  | Makes the Workers Storybooks publish to, and the environment settings `publish-storybook` reads             |
