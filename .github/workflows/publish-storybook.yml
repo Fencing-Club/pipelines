@@ -3,6 +3,10 @@ name: Publish Storybook
 # Publishes a workspace's Storybook to the GitHub environment the caller names. That environment's variables and secret,
 # which the cloudflare-storybook Terraform module writes, say where it goes, so a new destination is a new environment.
 # Any stage calls it: previews with a preview name, staging and production without one. github/README.md shows callers.
+#
+# Callers pass `secrets: inherit`. GitHub leaves an environment's secrets empty in a reusable workflow's job unless the
+# caller inherits its secrets, though the job names the environment and its variables come through
+# (https://github.com/actions/runner/issues/4453).
 on:
   workflow_call:
     inputs:
@@ -42,19 +46,22 @@ on:
         type: string
         default: auto
       build-secret-env:
-        description: Optional environment variable name for BUILD_SECRET, such as VITE_TLDRAW_LICENSE_KEY.
+        description: >-
+          The variable the build command gets one optional secret as, such as VITE_TLDRAW_LICENSE_KEY. It's read from
+          the secret of that name, which a caller inheriting its secrets has, or from BUILD_SECRET where one is passed.
         type: string
         default: ""
     secrets:
       BUILD_SECRET:
         description: >-
-          One optional build setting, given to the build command as build-secret-env names it. A Storybook is public, so
-          only a setting meant to ship in its files, such as a client-side licence key.
+          One optional build setting, given to the build command as build-secret-env names it, for a caller that passes
+          secrets by name rather than inheriting them. A Storybook is public, so only a setting meant to ship in its
+          files, such as a client-side licence key.
         required: false
       STORYBOOK_CLOUDFLARE_API_TOKEN:
         description: >-
           Not for callers: the job reads the environment's own, which cloudflare-storybook writes and which GitHub puts
-          ahead of a passed secret of the same name. It's declared because the workflow declares its other secrets.
+          ahead of a passed secret of the same name. It reaches the job only when the caller passes `secrets: inherit`.
         required: false
     outputs:
       url:
@@ -102,7 +109,7 @@ jobs:
           if [ -n "$WORKER" ] && [ -n "$ACCOUNT" ] && [ "$HAS_TOKEN" = true ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Skipped: the $ENVIRONMENT environment has no STORYBOOK_WORKER, CLOUDFLARE_ACCOUNT_ID and STORYBOOK_CLOUDFLARE_API_TOKEN yet. The cloudflare-storybook Terraform module writes them."
+            echo "::notice::Skipped: the $ENVIRONMENT environment has no STORYBOOK_WORKER, CLOUDFLARE_ACCOUNT_ID and STORYBOOK_CLOUDFLARE_API_TOKEN yet. The cloudflare-storybook Terraform module writes them, and the token reaches this job only when the caller passes secrets: inherit."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -115,7 +122,9 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           BUILD_COMMAND: ${{ inputs.build-command }}
-          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          # Passed by name, or inherited under the name build-secret-env gives.
+          BUILD_SECRET:
+            ${{ secrets.BUILD_SECRET || (inputs.build-secret-env != '' && secrets[inputs.build-secret-env]) || '' }}
           BUILD_SECRET_ENV: ${{ inputs.build-secret-env }}
         run: |
           if [ -n "$BUILD_SECRET_ENV" ]; then
