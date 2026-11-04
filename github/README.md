@@ -620,7 +620,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/preview-npm.yml@<commit sha> # v1.13.0
+    uses: betterapps-hq/pipelines/.github/workflows/preview-npm.yml@main
     with:
       packages: packages/cli
       comment: false
@@ -631,7 +631,7 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    uses: betterapps-hq/pipelines/.github/workflows/preview-desktop.yml@<commit sha> # v1.13.0
+    uses: betterapps-hq/pipelines/.github/workflows/preview-desktop.yml@main
     with:
       build-secret-env: VITE_TLDRAW_LICENSE_KEY
       comment: false
@@ -647,7 +647,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: betterapps-hq/pipelines/github/actions/pr-comment@<commit sha> # v1.13.0
+      - uses: betterapps-hq/pipelines/github/actions/pr-comment@main
         with:
           marker: "<!-- preview -->"
           body: |
