@@ -51,6 +51,11 @@ on:
           One optional build setting, given to the build command as build-secret-env names it. A Storybook is public, so
           only a setting meant to ship in its files, such as a client-side licence key.
         required: false
+      STORYBOOK_CLOUDFLARE_API_TOKEN:
+        description: >-
+          Not for callers: the job reads the environment's own, which cloudflare-storybook writes and which GitHub puts
+          ahead of a passed secret of the same name. It's declared because the workflow declares its other secrets.
+        required: false
     outputs:
       url:
         description: Where the Storybook was published; empty when publishing was skipped.
