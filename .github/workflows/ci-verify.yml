@@ -46,6 +46,12 @@ on:
         description: vite-plus, pnpm, or auto, as the setup action takes it.
         type: string
         default: auto
+      checkout-action:
+        description: >-
+          actions, blacksmith, or auto, as the setup action takes it: auto checks out with Blacksmith's checkout on a
+          Blacksmith runner, and actions/checkout everywhere else.
+        type: string
+        default: auto
       timeout-minutes:
         description: How long each runner gets.
         type: number
@@ -166,8 +172,9 @@ jobs:
 
       # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, pinned to a release's
       # commit, which Dependabot moves.
-      - uses: betterapps-hq/pipelines/github/actions/setup@0b0ed2e646a72e6db61a303cee36127aa5e17a48 # v1.3.1
+      - uses: betterapps-hq/pipelines/github/actions/setup@efa1c3e00652cca72174fdf3abdb911a5c501c45 # v1.11.1
         with:
+          checkout-action: ${{ inputs.checkout-action }}
           fetch-depth: ${{ inputs.fetch-depth }}
           lfs: ${{ inputs.lfs }}
           working-directory: ${{ inputs.working-directory }}
