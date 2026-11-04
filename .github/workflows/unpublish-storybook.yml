@@ -2,6 +2,9 @@ name: Unpublish Storybook
 
 # Deletes a Storybook that publish-storybook published as a Worker preview, such as a closed pull request's, and marks
 # its comment removed. github/README.md shows a caller.
+#
+# Callers pass `secrets: inherit`, as publish-storybook's do: GitHub leaves an environment's secrets empty in a reusable
+# workflow's job otherwise (https://github.com/actions/runner/issues/4453).
 on:
   workflow_call:
     inputs:
@@ -54,7 +57,7 @@ jobs:
           if [ -n "$WORKER" ] && [ -n "$ACCOUNT" ] && [ "$HAS_TOKEN" = true ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Skipped: the $ENVIRONMENT environment has no STORYBOOK_WORKER, CLOUDFLARE_ACCOUNT_ID and STORYBOOK_CLOUDFLARE_API_TOKEN yet, so nothing was published to it."
+            echo "::notice::Skipped: the $ENVIRONMENT environment has no STORYBOOK_WORKER, CLOUDFLARE_ACCOUNT_ID and STORYBOOK_CLOUDFLARE_API_TOKEN yet, or the caller didn't pass secrets: inherit, so there's nothing it can delete."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 

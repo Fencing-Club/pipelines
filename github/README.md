@@ -438,8 +438,11 @@ It reads these from the environment:
 
 Output: `url`, where it was published, empty when it skipped.
 
-Secrets: it reads the environment's own. A caller can pass `BUILD_SECRET`, optional, for one build setting such as a
-client-side licence key, as `cd-desktop-release` takes it. A Storybook is public, so it's only for a setting meant to
+Secrets: it reads the environment's own, which reach it only when the caller passes `secrets: inherit`: GitHub leaves an
+environment's secrets empty in a reusable workflow otherwise, though the job names the environment
+([actions/runner#4453](https://github.com/actions/runner/issues/4453)). One optional build setting, such as a
+client-side licence key, is read from the secret `build-secret-env` names, or from `BUILD_SECRET` for a caller that
+passes secrets by name, as `cd-desktop-release` takes it. A Storybook is public, so it's only for a setting meant to
 ship in its files. Permissions: `contents: read`, and `pull-requests: write` to comment, which the calling job has to
 grant.
 
@@ -466,6 +469,7 @@ jobs:
       environment: preview
       preview-name: pr-${{ github.event.pull_request.number }}
       working-directory: apps/desktop
+    secrets: inherit
 ```
 
 Staging and production in `cd-web.yml`, the same build for both:
@@ -487,12 +491,14 @@ jobs:
     with:
       environment: staging
       artifact: storybook
+    secrets: inherit
   production:
     needs: staging
     uses: betterapps-hq/pipelines/.github/workflows/publish-storybook.yml@main
     with:
       environment: production
       artifact: storybook
+    secrets: inherit
 ```
 
 ## unpublish-storybook
@@ -508,7 +514,8 @@ reports the Worker missing during a deploy.
 | `working-directory` | `.`        | The workspace `publish-storybook` was given, which its comment's marker names. |
 | `comment`           | `true`     | On a pull request, mark the comment removed.                                   |
 
-Permissions: `contents: read`, and `pull-requests: write` for the comment.
+Secrets: the environment's own, so the caller passes `secrets: inherit`, as for `publish-storybook`. Permissions:
+`contents: read`, and `pull-requests: write` for the comment.
 
 ```yaml
 # .github/workflows/preview-cleanup.yml
@@ -530,6 +537,7 @@ jobs:
     with:
       preview-name: pr-${{ github.event.pull_request.number }}
       working-directory: apps/desktop
+    secrets: inherit
 ```
 
 ## preview-npm
