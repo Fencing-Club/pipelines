@@ -1,0 +1,8 @@
+# actionlint 1.7.12 knows actions/create-github-app-token@v3 by its v3.0 inputs, from before v3.1 added client-id and
+# made app-id optional, so it rejects the release templates' calls. Its v3 tag has client-id; only those two errors are
+# ignored.
+paths:
+  .github/workflows/release-*.yml:
+    ignore:
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
