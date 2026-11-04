@@ -61,7 +61,7 @@ uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
 | Buildkit (`AndrewCraswell`) | Public     | `ci-verify`, behind a `verify` gate job; `setup` in its other test jobs             | The release pull request and npm publishing                              |
 | Agency (`AndrewCraswell`)   | Public     | `ci-verify`, with `env` for its registry; `setup` in its detection job              | Its deploys stay its own                                                 |
 | Spawn (`AndrewCraswell`)    | Private    | `ci-verify`; `setup` in its browser and template jobs                               | `preview-web`, `cd-web-deploy` and `cd-web-promote`                      |
-| Copacker (`betterapps-hq`)  | Private    | `ci-verify` with Turborepo's remote cache, on Blacksmith runners                    | `preview-web` with Neon branches, promotion, and the Terraform templates |
+| Copacker (`betterapps-hq`)  | Private    | `ci-verify` with Turborepo's remote cache                                           | `preview-web` with Neon branches, promotion, and the Terraform templates |
 | Verdun (`AndrewCraswell`)   | Private    | `ci-verify` with Git LFS; `setup` in its Railway deploy                             | Its deploy stays its own                                                 |
 | HOA (`AndrewCraswell`)      | Private    | `ci-verify`; `setup` in its preview and deploy jobs                                 | `preview-web` and `cd-web-deploy`, with D1 migrations                    |
 

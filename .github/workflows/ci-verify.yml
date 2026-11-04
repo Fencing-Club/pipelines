@@ -46,12 +46,6 @@ on:
         description: vite-plus, pnpm, or auto, as the setup action takes it.
         type: string
         default: auto
-      checkout-action:
-        description: >-
-          actions, blacksmith, or auto, as the setup action takes it: auto checks out with Blacksmith's checkout on a
-          Blacksmith runner, and actions/checkout everywhere else.
-        type: string
-        default: auto
       timeout-minutes:
         description: How long each runner gets.
         type: number
@@ -173,7 +167,6 @@ jobs:
       # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
       - uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
-          checkout-action: ${{ inputs.checkout-action }}
           fetch-depth: ${{ inputs.fetch-depth }}
           lfs: ${{ inputs.lfs }}
           working-directory: ${{ inputs.working-directory }}
