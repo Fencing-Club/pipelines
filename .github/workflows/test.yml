@@ -185,6 +185,9 @@ jobs:
       concurrency-key: test-${{ github.ref }}
       # As setup's own test, this repository has no LFS objects, so it proves the input reaches setup cleanly.
       lfs: true
+      # These are GitHub's runners, where Blacksmith's checkout checks out as actions/checkout does, so this proves the
+      # input reaches setup.
+      checkout-action: ${{ matrix.example == 'pnpm' && 'blacksmith' || 'auto' }}
       vite-task-cache: ${{ matrix.example == 'vite-plus' }}
       prepare: echo prepared > prepared.txt
       cache-path: examples/${{ matrix.example }}/prepared.txt
