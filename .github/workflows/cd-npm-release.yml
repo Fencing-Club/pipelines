@@ -1,0 +1,83 @@
+name: Release npm packages
+
+# A repository's cd-npm.yml calls this once CI passes on the default branch, for a workspace whose npm packages ship in a
+# pipeline of their own, such as one that also ships a desktop app, which cd-desktop-version versions apart. It runs
+# beachball-publish-npm: Beachball bumps the packages in scope from their change files, publishes them to npm through
+# trusted publishing, then commits, tags and pushes to the default branch with the environment's RELEASE_DEPLOY_KEY.
+# It releases only for CI's run on a push, never a pull request's, and only while the commit CI passed on is still the
+# branch's head: a newer commit's own run releases it. npm's trusted publisher names the caller's file, cd-npm.yml. A
+# workspace whose CI only publishes packages can call beachball-publish-npm from its ci.yml instead, as Buildkit does.
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: The workspace's root, relative to the repository's.
+        type: string
+        default: .
+      scope:
+        description: >-
+          Globs of the package paths to release, one a line, such as !apps/desktop to leave a desktop app to
+          cd-desktop-version. Empty takes every package.
+        type: string
+        default: ""
+      environment:
+        description:
+          The environment the release runs in, which holds RELEASE_DEPLOY_KEY and npm's trusted publisher names.
+        type: string
+        default: npm
+      build-command:
+        description: What builds the packages before they're published, run in the working directory.
+        type: string
+        default: pnpm --recursive run --if-present build
+      message:
+        description: The release commit's message.
+        type: string
+        default: "chore(release): publish packages"
+      tag:
+        description: The npm dist-tag the new versions get.
+        type: string
+        default: latest
+      toolchain:
+        description: vite-plus, pnpm, or auto, as the setup action takes it.
+        type: string
+        default: auto
+      dry-run:
+        description: Bump and report on any event, without the environment, publishing or pushing. Used to test it.
+        type: boolean
+        default: false
+    secrets:
+      RELEASE_DEPLOY_KEY:
+        description: The deploy key's private key, when the caller passes it. The environment's own takes its place.
+        required: false
+    outputs:
+      packages:
+        description: The packages whose version changed, as a JSON array of name, from and to.
+        value: ${{ jobs.release.outputs.packages || '[]' }}
+      published:
+        description: true when the release published and pushed.
+        value: ${{ jobs.release.outputs.published || 'false' }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: >-
+      inputs.dry-run || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' && github.event.workflow_run.head_sha == github.sha)
+    permissions:
+      contents: read
+      # npm's trusted publishing exchanges the run's OIDC token for a short-lived one, and signs provenance with it.
+      id-token: write
+    uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@main
+    with:
+      working-directory: ${{ inputs.working-directory }}
+      scope: ${{ inputs.scope }}
+      environment: ${{ inputs.environment }}
+      build-command: ${{ inputs.build-command }}
+      message: ${{ inputs.message }}
+      tag: ${{ inputs.tag }}
+      toolchain: ${{ inputs.toolchain }}
+      dry-run: ${{ inputs.dry-run }}
+    secrets:
+      RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}

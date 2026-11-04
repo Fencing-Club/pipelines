@@ -1,0 +1,71 @@
+name: Version a desktop app
+
+# A repository's cd-desktop.yml calls this once CI passes on the default branch, before cd-desktop-release. Beachball
+# publishes every package it versions and has no setting to version one without publishing it, so this runs
+# beachball-publish-npm scoped to the app with publishing off: it bumps the app's version and changelog from its change
+# files, then commits, tags and pushes to the default branch with the environment's RELEASE_DEPLOY_KEY. CI's run on that
+# commit starts cd-desktop.yml again, and cd-desktop-release publishes the new version. It versions only for CI's run on
+# a push, never a pull request's, and only while the commit CI passed on is still the branch's head. The npm packages'
+# change files are left for cd-npm-release.
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: The workspace's root, relative to the repository's.
+        type: string
+        default: .
+      scope:
+        description: The app's package path, relative to the working directory, as a Beachball scope glob.
+        type: string
+        default: apps/desktop
+      environment:
+        description: The environment the job runs in, which holds RELEASE_DEPLOY_KEY. Keep it to the default branch.
+        type: string
+        default: desktop
+      message:
+        description: The version commit's message.
+        type: string
+        default: "chore(release): version the desktop app"
+      toolchain:
+        description: vite-plus, pnpm, or auto, as the setup action takes it.
+        type: string
+        default: auto
+      dry-run:
+        description: Bump and report on any event, without the environment or pushing. Used to test it.
+        type: boolean
+        default: false
+    secrets:
+      RELEASE_DEPLOY_KEY:
+        description: The deploy key's private key, when the caller passes it. The environment's own takes its place.
+        required: false
+    outputs:
+      packages:
+        description: The app's version change, as a JSON array of name, from and to, or empty.
+        value: ${{ jobs.version.outputs.packages || '[]' }}
+      versioned:
+        description: true when a new version was committed and pushed.
+        value: ${{ jobs.version.outputs.published || 'false' }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    if: >-
+      inputs.dry-run || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' && github.event.workflow_run.head_sha == github.sha)
+    permissions:
+      contents: read
+      # beachball-publish-npm's job asks for it, for npm, though with publishing off nothing here uses it.
+      id-token: write
+    uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@main
+    with:
+      working-directory: ${{ inputs.working-directory }}
+      scope: ${{ inputs.scope }}
+      environment: ${{ inputs.environment }}
+      publish: false
+      message: ${{ inputs.message }}
+      toolchain: ${{ inputs.toolchain }}
+      dry-run: ${{ inputs.dry-run }}
+    secrets:
+      RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
