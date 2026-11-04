@@ -89,11 +89,12 @@ jobs:
     outputs:
       packages: ${{ steps.release.outputs.packages }}
       published: ${{ steps.release.outputs.published }}
-    # Releases queue rather than cancel, so one is never cut off between publishing and pushing.
+    # Releases queue rather than cancel, so one is never cut off between publishing and pushing. Each scope has a group
+    # of its own, since GitHub keeps only the newest run waiting in a group, which would drop another scope's release.
     concurrency:
       group:
-        beachball-publish-npm-${{ github.repository }}-${{ inputs.working-directory }}-${{ inputs.dry-run &&
-        github.run_id || 'release' }}
+        beachball-publish-npm-${{ github.repository }}-${{ inputs.working-directory }}-${{ toJSON(inputs.scope) }}-${{
+        inputs.dry-run && github.run_id || 'release' }}
       cancel-in-progress: false
     defaults:
       run:
