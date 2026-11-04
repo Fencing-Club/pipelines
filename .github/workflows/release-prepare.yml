@@ -129,10 +129,9 @@ jobs:
           echo "auth=$auth" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, pinned to a release's
-      # commit, which Dependabot moves.
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
       - if: steps.ready.outputs.ready == 'true'
-        uses: betterapps-hq/pipelines/github/actions/setup@0b0ed2e646a72e6db61a303cee36127aa5e17a48 # v1.3.1
+        uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           ref: ${{ steps.ready.outputs.commit }}
           working-directory: ${{ inputs.working-directory }}
@@ -253,7 +252,7 @@ jobs:
 
       - if: steps.ready.outputs.auth == 'app' && steps.release.outputs.changed != ''
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ inputs.app-client-id }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

@@ -71,7 +71,7 @@ runs:
     # actions/cache restores now and saves in its post step, at the end of the job, and only if every step passed:
     # its post-if is success(). Pull requests from forks get a read-only cache token, so they restore and don't save.
     - id: cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6
       with:
         path: ${{ steps.key.outputs.path }}
         key: ${{ steps.key.outputs.key }}

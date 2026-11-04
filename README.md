@@ -47,12 +47,12 @@ rest of delivery (`cd-desktop-build`, `cd-desktop-release`, `cd-desktop-promote`
 
 ## Callers
 
-Every repository's pipelines are moving onto these templates, a stage at a time. A repository's own workflows say which
-release they pin. Each pins a template by its full commit, with the version in a comment, and
-[github/README.md](github/README.md) documents each one's inputs, secrets and permissions:
+Every repository's pipelines are moving onto these templates, a stage at a time. Each calls a template at `main`, so
+every repository gets each change as soon as it merges, and [github/README.md](github/README.md) documents each one's
+inputs, secrets and permissions:
 
 ```yaml
-uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@daadeb4db946e05b27cec1a1fb35be777feb4718 # v1.4.0
+uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@main
 ```
 
 | Repository                  | Visibility | On the templates                                                                    | Next                                                                     |
@@ -92,14 +92,13 @@ publish a GitHub beta after a successful CI push. `cd-desktop-promote.yml` promo
 environment, checking its recorded installer hashes and preserving its files. [The GitHub guide](github/README.md)
 documents both callers.
 
-- **Callers pin a full commit SHA,** with the version in a comment, and Dependabot moves the pins. A pull request can
-  then never run a changed copy of a template.
-- **Templates name their own actions in full, pinned to a release's commit,** as they pin third-party actions:
-  `betterapps-hq/pipelines/github/actions/setup@<commit sha> # v1.2.0`. In a reusable workflow, `./` is the caller's
-  repository. A change to an action is tested directly, and reaches the templates when Dependabot moves their pin to the
-  release that has it.
+- **Callers use the templates at `main`,** not a pinned commit or release, so every repository gets the latest as soon
+  as it merges. A change to a template therefore reaches every caller at once, which `test.yml` and the review guard.
+- **Templates name their own actions in full, at `main` too:** `betterapps-hq/pipelines/github/actions/setup@main`. In a
+  reusable workflow, `./` is the caller's repository.
 - **Secrets are passed by name,** never `secrets: inherit`, and each job asks for the least permissions it needs.
-- **Templates use third-party actions pinned by commit,** with the version in a comment, which Dependabot moves.
+- **Templates use third-party actions at their major version's tag,** such as `actions/checkout@v7`, so they get each
+  release within it. Dependabot moves them to a new major.
 - **Each template documents its inputs, secrets, permissions and an example caller** in its system's README.
 
 ## Testing
@@ -107,12 +106,12 @@ documents both callers.
 [`test.yml`](.github/workflows/test.yml) lints every workflow with actionlint, runs the setup, pr-comment and
 vite-task-cache actions from the commit under test on Ubuntu, Windows and macOS, setup against the pnpm and Vite+
 examples, vite-task-cache with the Vite+ example's tasks, checking a fresh runner replays them, and calls the reusable
-workflows against them. A reusable workflow uses this repository's actions at the release it names, so a change to an
-action is tested directly, and reaches the workflows when it's released. It also validates every Terraform module's
-example, and checks the Storybook, Terraform and web templates skip cleanly where nothing is set up for them.
-`release-prepare`, `cd-npm-publish` and `beachball-publish-npm` run as dry runs against the release example, which need
-no token: the bump's title and versions, and which packages each publishing rule picks, in order. `release-merge` only
-acts on a real release pull request, so actionlint is its only check here.
+workflows against them. A reusable workflow uses this repository's actions at `main`, so a change to an action is tested
+directly, and reaches the workflows when it merges. It also validates every Terraform module's example, and checks the
+Storybook, Terraform and web templates skip cleanly where nothing is set up for them. `release-prepare`,
+`cd-npm-publish` and `beachball-publish-npm` run as dry runs against the release example, which need no token: the
+bump's title and versions, and which packages each publishing rule picks, in order. `release-merge` only acts on a real
+release pull request, so actionlint is its only check here.
 
 The repository is on Vite+, as its callers are: `pnpm format` formats the workflows, actions, modules and docs with
 `vp fmt`, and `pnpm verify` checks them, which CI runs through ci-verify. Each example workspace keeps its own settings.
@@ -122,8 +121,6 @@ The repository is on Vite+, as its callers are: `pnpm format` formats the workfl
 `main` takes changes only through pull requests, with the `Tests pass` check and every review thread resolved. Releases
 are tagged `vMAJOR.MINOR.PATCH` on `main`, and a tag never moves or goes away once it's pushed.
 
-1. Merge the pull requests that make the release.
-2. Tag `main`'s commit with the new version, push the tag, and publish a GitHub release from it with what changed and
-   its commit SHA.
-3. Dependabot moves the templates' pins on their own actions to the new release, and callers' pins on the templates, in
-   pull requests of their own.
+1. Merge the pull requests that make the release. Callers already have them, since they use `main`.
+2. Tag `main`'s commit with the new version, push the tag, and publish a GitHub release from it with what changed, as a
+   record of what changed when.

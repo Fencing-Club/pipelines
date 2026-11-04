@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # The actions the templates use, pinned by commit with the version in a comment.
+  # The third-party actions the templates use, at their major version's tag, moved to each new major.
   - package-ecosystem: github-actions
     directories: ["/", "/github/actions/*"]
     schedule:

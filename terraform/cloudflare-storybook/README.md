@@ -156,7 +156,7 @@ provider "github" {
 }
 
 module "storybook" {
-  source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/cloudflare-storybook?ref=<sha>" # v1.1.0
+  source = "git::https://github.com/betterapps-hq/pipelines.git//terraform/cloudflare-storybook?ref=main"
 
   account_id  = "<account id>"
   repository  = "parity"
