@@ -1,0 +1,212 @@
+name: Preview desktop installers
+
+# Builds a pull request's desktop app into unsigned installers on each operating system, as cd-desktop-release does, and
+# keeps them as the run's artifacts, linked from a pull request comment. Nothing is tagged or released, and the artifacts
+# expire on their own. github/README.md shows a caller.
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: The workspace's root, relative to the repository's.
+        type: string
+        default: .
+      app-directory:
+        description:
+          The app folder, relative to the working directory, with its package.json and electron-builder config.
+        type: string
+        default: apps/desktop
+      build-command:
+        description: What builds the app, run in the working directory.
+        type: string
+        default: pnpm build
+      package-command:
+        description: What makes the installers, run in app-directory. electron-builder picks its host's targets.
+        type: string
+        default: pnpm exec electron-builder --publish never
+      artifact-directory:
+        description: Where the installers are, relative to app-directory.
+        type: string
+        default: dist
+      os:
+        description: The runners to build on, as a JSON array.
+        type: string
+        default: '["windows-latest", "macos-latest", "ubuntu-latest"]'
+      build-secret-env:
+        description: Optional environment variable name for BUILD_SECRET, such as VITE_TLDRAW_LICENSE_KEY.
+        type: string
+        default: ""
+      artifact-prefix:
+        description: Starts each artifact's name, <prefix>-<runner>, such as installers-windows-latest.
+        type: string
+        default: installers
+      retention-days:
+        description: How long GitHub keeps the installers, from 1 to the repository's limit.
+        type: number
+        default: 14
+      comment:
+        description: On a pull request, comment links to the installers, editing the same comment on later runs.
+        type: boolean
+        default: true
+    secrets:
+      BUILD_SECRET:
+        description: One optional build setting, given to the build as build-secret-env names it.
+        required: false
+    outputs:
+      artifacts:
+        description: >-
+          A JSON array of the installers' artifacts, each with its name, os (Windows, macOS, Linux or the runner's
+          label), url and size in bytes. Empty when none was built.
+        value: ${{ jobs.links.outputs.artifacts }}
+      markdown:
+        description: Links to the installers, as Markdown for a comment, or why there are none.
+        value: ${{ jobs.links.outputs.markdown }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build installers (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: betterapps-hq/pipelines/github/actions/setup@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Build the app
+        env:
+          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          BUILD_SECRET_ENV: ${{ inputs.build-secret-env }}
+          BUILD_COMMAND: ${{ inputs.build-command }}
+        run: |
+          if [ -n "$BUILD_SECRET_ENV" ]; then
+            [[ "$BUILD_SECRET_ENV" =~ ^[A-Z_][A-Z0-9_]*$ ]] || exit 1
+            if [ -n "$BUILD_SECRET" ]; then export "$BUILD_SECRET_ENV=$BUILD_SECRET";
+            else echo "::notice::No optional build secret configured."; fi
+          fi
+          bash -e -o pipefail -c "$BUILD_COMMAND"
+      - name: Package unsigned installers
+        working-directory: ${{ inputs.working-directory }}/${{ inputs.app-directory }}
+        env:
+          PACKAGE_COMMAND: ${{ inputs.package-command }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          echo "::notice::Unsigned packaging; signing is configured separately."
+          bash -e -o pipefail -c "$PACKAGE_COMMAND"
+      - id: installers
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+          APP_DIRECTORY: ${{ inputs.app-directory }}
+          ARTIFACT_DIRECTORY: ${{ inputs.artifact-directory }}
+          RUNNER_PLATFORM: ${{ runner.os }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync, readdirSync} from "node:fs"
+          import {resolve, relative, isAbsolute} from "node:path"
+          const root = resolve(process.env.GITHUB_WORKSPACE)
+          const directory = resolve(root, process.env.WORKING_DIRECTORY, process.env.APP_DIRECTORY, process.env.ARTIFACT_DIRECTORY)
+          const within = relative(root, directory)
+          if (within.startsWith("..") || isAbsolute(within) || /[\r\n]/.test(directory)) throw new Error("Installers must stay in the workspace")
+          const extension = {Windows: ".exe", macOS: ".dmg", Linux: ".AppImage"}[process.env.RUNNER_PLATFORM]
+          if (!extension || !readdirSync(directory, {withFileTypes:true}).some(file => file.isFile() && file.name.endsWith(extension))) {
+            throw new Error(`Missing ${process.env.RUNNER_PLATFORM} installer (${extension})`)
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `directory=${directory.replaceAll("\\", "/")}\n`)
+          NODE
+      # Installers only: the update metadata and blockmaps matter to a release, not to someone trying a build.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.os }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention-days }}
+          path: |
+            ${{ steps.installers.outputs.directory }}/*.exe
+            ${{ steps.installers.outputs.directory }}/*.dmg
+            ${{ steps.installers.outputs.directory }}/*.AppImage
+
+  # The artifacts' links come from the run's list of them, since a matrix job's outputs keep only one runner's.
+  links:
+    name: Link the installers
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Read, to list the run's artifacts.
+      actions: read
+      # Write, to comment. The caller's job has to grant it too.
+      pull-requests: write
+    outputs:
+      artifacts: ${{ steps.links.outputs.artifacts }}
+      markdown: ${{ steps.links.outputs.markdown }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Node comes with the runner: this job checks nothing out.
+      - id: links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFIX: ${{ inputs.artifact-prefix }}
+          RETENTION_DAYS: ${{ inputs.retention-days }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[] | tojson' > "$RUNNER_TEMP/artifacts.jsonl"
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs"
+          import { join } from "node:path"
+          const { PREFIX, RETENTION_DAYS, BUILD_RESULT, SHA, RUN_URL, RUNNER_TEMP, GITHUB_OUTPUT } = process.env
+          const label = (runner) =>
+            runner.startsWith("windows") ? "Windows" : runner.startsWith("macos") ? "macOS" :
+            runner.startsWith("ubuntu") ? "Linux" : runner
+          // A rerun uploads its own copy, so the newest of each name is the one to link.
+          const newest = new Map()
+          for (const line of readFileSync(join(RUNNER_TEMP, "artifacts.jsonl"), "utf8").split("\n").filter(Boolean)) {
+            const artifact = JSON.parse(line)
+            if (!artifact.name.startsWith(`${PREFIX}-`) || artifact.expired) continue
+            const kept = newest.get(artifact.name)
+            if (!kept || artifact.created_at > kept.created_at) newest.set(artifact.name, artifact)
+          }
+          const artifacts = [...newest.values()]
+            .map((artifact) => ({
+              name: artifact.name,
+              os: label(artifact.name.slice(PREFIX.length + 1)),
+              url: `${RUN_URL}/artifacts/${artifact.id}`,
+              size: artifact.size_in_bytes
+            }))
+            .sort((a, b) => a.os.localeCompare(b.os))
+          const megabytes = (bytes) => `${Math.round(bytes / 1_000_000)} MB`
+          let markdown
+          if (artifacts.length) {
+            const links = artifacts.map(({ os, url, size }) => `[${os}](${url}) (${megabytes(size)})`).join(", ")
+            markdown = `**Unsigned installers** from ${SHA.slice(0, 7)}: ${links}. They're [the run's](${RUN_URL}) ` +
+              `artifacts, so downloading one needs a GitHub sign-in, and they're kept for ${RETENTION_DAYS} days.`
+            if (BUILD_RESULT !== "success") markdown += ` Some systems' builds failed; the run says which.`
+          } else {
+            markdown = `**Unsigned installers:** none were built from ${SHA.slice(0, 7)}; [the run](${RUN_URL}) says why.`
+          }
+          appendFileSync(GITHUB_OUTPUT, `artifacts=${artifacts.length ? JSON.stringify(artifacts) : ""}\n`)
+          appendFileSync(GITHUB_OUTPUT, `markdown<<PREVIEW_DESKTOP_EOF\n${markdown}\nPREVIEW_DESKTOP_EOF\n`)
+          NODE
+
+      # One comment per workflow, found by its marker, which later runs edit.
+      - if: inputs.comment && github.event_name == 'pull_request'
+        uses: betterapps-hq/pipelines/github/actions/pr-comment@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+        with:
+          marker: "<!-- preview-desktop ${{ inputs.working-directory }} ${{ inputs.app-directory }} -->"
+          body: ${{ steps.links.outputs.markdown }}

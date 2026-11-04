@@ -36,6 +36,12 @@ on:
         description: Print the plan and what the apply did in the run's log. Terraform hides values marked sensitive.
         type: boolean
         default: true
+      credentials:
+        description: >-
+          The provider credentials the project can't apply without, separated by spaces, from CLOUDFLARE_API_TOKEN,
+          TF_GITHUB_TOKEN and NEON_API_KEY. Without one of them, the apply is skipped with a notice.
+        type: string
+        default: ""
     secrets:
       TF_STATE_ACCESS_KEY_ID:
         description: R2 state bucket access key. An environment secret with this name takes precedence.
@@ -91,9 +97,25 @@ jobs:
         working-directory: .
         env:
           HAS_STATE_CREDENTIALS: ${{ secrets.TF_STATE_ACCESS_KEY_ID != '' && secrets.TF_STATE_SECRET_ACCESS_KEY != '' }}
+          HAS_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_TF_GITHUB_TOKEN: ${{ secrets.TF_GITHUB_TOKEN != '' }}
+          HAS_NEON_API_KEY: ${{ secrets.NEON_API_KEY != '' }}
+          CREDENTIALS: ${{ inputs.credentials }}
           GH_TOKEN: ${{ secrets.TF_GITHUB_TOKEN }}
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
+          missing=()
+          for name in $CREDENTIALS; do
+            case "$name" in
+              CLOUDFLARE_API_TOKEN | TF_GITHUB_TOKEN | NEON_API_KEY) ;;
+              *)
+                echo "::error::credentials names $name, which isn't a secret this workflow takes."
+                exit 1
+                ;;
+            esac
+            has="HAS_$name"
+            if [ "${!has}" != true ]; then missing+=("$name"); fi
+          done
           # The merged vars context also includes organization/repository values. Read the selected environment
           # directly, so a marker at either of those broader scopes cannot enable an unconfigured environment.
           APPLY_ENABLED=
@@ -103,6 +125,10 @@ jobs:
           fi
           if [ "$APPLY_ENABLED" != true ]; then
             echo "::notice::Skipped: configure the $ENVIRONMENT environment's protection, set its TF_APPLY_ENABLED variable to true, and grant the GitHub token Environments read access before applying."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "result=skipped" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_STATE_CREDENTIALS" = true ] && [ "${#missing[@]}" -gt 0 ]; then
+            echo "::notice::Skipped: no ${missing[*]} is available for $ENVIRONMENT, so nothing was applied."
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "result=skipped" >> "$GITHUB_OUTPUT"
           elif [ "$HAS_STATE_CREDENTIALS" = true ]; then
