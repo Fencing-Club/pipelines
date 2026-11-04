@@ -440,11 +440,14 @@ It reads these from the environment:
 | `artifact`          | (empty)                | Publish this artifact from the same run instead of building.                      |
 | `comment`           | `true`                 | On a pull request, comment the URL.                                               |
 | `toolchain`         | `auto`                 | As the setup action takes it.                                                     |
+| `build-secret-env`  | (empty)                | The variable `BUILD_SECRET` is given to the build command as.                     |
 
 Output: `url`, where it was published, empty when it skipped.
 
-Secrets: none passed; it reads the environment's own. Permissions: `contents: read`, and `pull-requests: write` to
-comment, which the calling job has to grant.
+Secrets: it reads the environment's own. A caller can pass `BUILD_SECRET`, optional, for one build setting such as a
+client-side licence key, as `cd-desktop-release` takes it. A Storybook is public, so it's only for a setting meant to
+ship in its files. Permissions: `contents: read`, and `pull-requests: write` to comment, which the calling job has to
+grant.
 
 Publishes to the same place queue rather than cancel each other, so the last push's Storybook is the one that stays.
 
@@ -533,6 +536,130 @@ jobs:
     with:
       preview-name: pr-${{ github.event.pull_request.number }}
       working-directory: apps/desktop
+```
+
+## preview-npm
+
+A reusable workflow for pull requests. It publishes the packages the caller lists to
+[pkg.pr.new](https://github.com/stackblitz-labs/pkg.pr.new), so each pull request's packages can be installed, or a CLI
+run with `npx`, from a URL before they're released. It comments how, editing the same comment on later pushes.
+
+- **pkg.pr.new's GitHub App has to be installed** on the repository,
+  [from its page](https://github.com/apps/pkg-pr-new). Until it is, the workflow skips with a notice, and its `markdown`
+  output says why. It needs no secret.
+- **The URLs are short where they can be,** `https://pkg.pr.new/<name>@<commit>`, for a package that's already on npm
+  with a `repository` field naming this repository, and the long form otherwise.
+- **The package manager packs each package,** `pnpm` unless the caller says otherwise, so `workspace:` and `catalog:`
+  versions are written out and each package's `prepack` script runs, as they do when it's released.
+- **Nothing is deleted when the pull request closes.** pkg.pr.new keeps what it was given, so there's no cleanup
+  workflow.
+
+| Input               | Default    | What it's for                                                                           |
+| ------------------- | ---------- | --------------------------------------------------------------------------------------- |
+| `packages`          | (required) | The packages' folders, relative to the working directory, separated by spaces or lines. |
+| `working-directory` | `.`        | The workspace's root, relative to the repository's.                                     |
+| `build-command`     | (empty)    | What runs before packing, in the working directory.                                     |
+| `package-manager`   | `pnpm`     | What packs each package: `npm`, `pnpm`, `yarn` or `bun`.                                |
+| `comment`           | `true`     | On a pull request, comment how to install each package.                                 |
+| `toolchain`         | `auto`     | As the setup action takes it.                                                           |
+
+Outputs:
+
+- `published`: `true`, or `false` when it skipped.
+- `packages`: a JSON array of what was published, each with its `name`, `url` and `command`, which is `npx <url>` for a
+  package with a `bin` and `npm install <url>` otherwise. Empty when it skipped.
+- `markdown`: the comment's text, or why nothing was published, for a caller that puts every preview in one comment.
+
+Secrets: none. Permissions: `contents: read`, and `pull-requests: write` to comment, which the calling job has to grant.
+
+## preview-desktop
+
+A reusable workflow for pull requests. It builds the desktop app into unsigned installers on each operating system, with
+the same build and package commands as [`cd-desktop-release`](#desktop-releases), and keeps them as the run's artifacts,
+one for each system. Then it comments links to them, editing the same comment on later pushes.
+
+- **Nothing is tagged or released.** The artifacts expire after `retention-days`, so there's no cleanup workflow.
+- **Downloading one needs a GitHub sign-in,** as every artifact does. The comment says so.
+- **Only the installers are kept:** `.exe`, `.dmg` and `.AppImage`. A build missing its system's installer fails.
+- **A system whose build fails doesn't stop the others,** and the comment links what was built and says some failed.
+
+| Input                | Default                                               | What it's for                                         |
+| -------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
+| `working-directory`  | `.`                                                   | The workspace's root, relative to the repository's.   |
+| `app-directory`      | `apps/desktop`                                        | The app folder, relative to the working directory.    |
+| `build-command`      | `pnpm build`                                          | What builds the app, in the working directory.        |
+| `package-command`    | `pnpm exec electron-builder --publish never`          | What makes the installers, in the app folder.         |
+| `artifact-directory` | `dist`                                                | Where the installers are, relative to the app folder. |
+| `os`                 | `["windows-latest", "macos-latest", "ubuntu-latest"]` | The runners to build on, as a JSON array.             |
+| `build-secret-env`   | (empty)                                               | The variable `BUILD_SECRET` is given to the build as. |
+| `artifact-prefix`    | `installers`                                          | Starts each artifact's name: `<prefix>-<runner>`.     |
+| `retention-days`     | `14`                                                  | How long GitHub keeps the installers.                 |
+| `comment`            | `true`                                                | On a pull request, comment links to the installers.   |
+
+Outputs:
+
+- `artifacts`: a JSON array of the installers' artifacts, each with its `name`, `os` (`Windows`, `macOS`, `Linux`, or
+  the runner's label), `url` and `size` in bytes. Empty when none was built.
+- `markdown`: the comment's text, links to the installers or why there are none.
+
+Secrets: `BUILD_SECRET`, optional, as `cd-desktop-release` takes it. Permissions: `contents: read`, `actions: read` to
+list the run's artifacts, and `pull-requests: write` to comment, which the calling job has to grant.
+
+### Every preview in one comment
+
+Each preview template comments on its own by default. A repository with several gives each `comment: false` and writes
+one comment from their outputs with [`pr-comment`](#pr-comment), as Parity's `preview.yml` does for its CLI, its
+installers and its Storybook:
+
+```yaml
+# .github/workflows/preview.yml
+on:
+  pull_request:
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  npm:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: betterapps-hq/pipelines/.github/workflows/preview-npm.yml@<commit sha> # v1.13.0
+    with:
+      packages: packages/cli
+      comment: false
+
+  desktop:
+    if: github.actor != 'dependabot[bot]'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: betterapps-hq/pipelines/.github/workflows/preview-desktop.yml@<commit sha> # v1.13.0
+    with:
+      build-secret-env: VITE_TLDRAW_LICENSE_KEY
+      comment: false
+    secrets:
+      BUILD_SECRET: ${{ secrets.VITE_TLDRAW_LICENSE_KEY }}
+
+  comment:
+    needs: [npm, desktop]
+    if: >-
+      !cancelled() && github.event.pull_request.head.repo.full_name == github.repository && github.actor !=
+      'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: betterapps-hq/pipelines/github/actions/pr-comment@<commit sha> # v1.13.0
+        with:
+          marker: "<!-- preview -->"
+          body: |
+            ${{ needs.npm.outputs.markdown }}
+
+            ${{ needs.desktop.outputs.markdown }}
 ```
 
 ## Terraform
@@ -715,6 +842,8 @@ plans it against its state in R2, and comments a summary of the plan, editing th
 - **It doesn't take the state lock.** A plan only reads the state, so it never waits on an apply or holds one up.
 - **Without state credentials it still checks the project,** as on forks' and Dependabot's pull requests, which get no
   repository secrets: it checks formatting and validates, then skips the plan with a notice, and doesn't comment.
+- **Nor does it plan without the provider credentials `credentials` names,** such as a new project's Cloudflare token
+  that hasn't been made yet. It checks the project and skips the plan with a notice naming them, rather than fail.
 - **A failed plan says so in the comment,** with a link to the run, so the comment never shows a plan that's out of
   date.
 - **A newer push cancels a plan still running.**
@@ -729,10 +858,12 @@ plans it against its state in R2, and comments a summary of the plan, editing th
 | `fmt-path`          | `.`        | What `terraform fmt` checks, recursively, from the working directory. `..` takes in modules too. |
 | `show-plan`         | `true`     | Print the full plan in the run's log.                                                            |
 | `comment`           | `true`     | On a pull request, comment the plan's summary.                                                   |
+| `credentials`       | (empty)    | The provider secrets the project can't plan without, by name, separated by spaces.               |
 
 Secrets: those in [the table above](#where-credentials-come-from), all optional, passed by name.
 
-Output: `result`, which is `changes`, `no-changes`, or `skipped` when there were no state credentials.
+Output: `result`, which is `changes`, `no-changes`, or `skipped` when there were no state credentials or a provider
+credential `credentials` names was missing.
 
 Permissions: `contents: read`, and `pull-requests: write` to comment. The calling job has to grant both even with
 `comment: false` or outside a pull request, since the job asks for them whatever it does.
@@ -751,7 +882,8 @@ apps are incompatible with this setting and the job will fail.
   and `main` may have moved since. Terraform refuses to apply a plan if the state changes after it's made.
 - **Its credentials come from named caller secrets or the environment,** by the names in
   [the table above](#where-credentials-come-from). Environment secrets take precedence. Until state credentials are
-  available and the environment's `TF_APPLY_ENABLED` variable is `true`, the apply skips with a notice.
+  available and the environment's `TF_APPLY_ENABLED` variable is `true`, the apply skips with a notice. So it does while
+  a provider credential that `credentials` names is missing from both.
 - **Required reviewers on the environment approve before the job starts,** on the strength of the plan the pull request
   showed, where the repository's plan has them.
 - **Applies to one project run one at a time.** A newer push replaces one still waiting, so the last push's
@@ -766,12 +898,13 @@ apps are incompatible with this setting and the job will fail.
 | `backend-config`    | (empty)    | More backend settings for `terraform init`, as `key=value`, one per line. |
 | `terraform-version` | `1.16.6`   | The Terraform to run.                                                     |
 | `show-plan`         | `true`     | Print the plan, and what the apply did, in the run's log.                 |
+| `credentials`       | (empty)    | The provider secrets the project can't apply without, by name.            |
 
 Secrets: the optional named credentials in [the table above](#where-credentials-come-from), with environment overrides.
 The `TF_APPLY_ENABLED` marker belongs only in the selected environment and is not a caller input.
 
-Output: `result`, which is `applied`, `no-changes`, or `skipped` when state credentials or the environment enablement
-marker are absent.
+Output: `result`, which is `applied`, `no-changes`, or `skipped` when state credentials, a provider credential
+`credentials` names, or the environment enablement marker are absent.
 
 Permissions: `contents: read`.
 

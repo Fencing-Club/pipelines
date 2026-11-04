@@ -53,6 +53,19 @@ jobs:
             fi
             rm "$output"
           done
+          # A project's provider credentials: with the environment enabled, a missing one skips the apply too.
+          for has in true false; do
+            output=$(mktemp)
+            TEST_MARKER=true HAS_STATE_CREDENTIALS=true GH_TOKEN=unused ENVIRONMENT='test/room space' \
+              CREDENTIALS=CLOUDFLARE_API_TOKEN HAS_CLOUDFLARE_API_TOKEN="$has" \
+              GITHUB_REPOSITORY=example/repository GITHUB_OUTPUT="$output" run_gate
+            if [ "$has" = true ]; then
+              grep -qx 'ready=true' "$output"
+            else
+              grep -qx 'result=skipped' "$output"
+            fi
+            rm "$output"
+          done
 
   setup:
     name: setup (${{ matrix.example }}, ${{ matrix.os }})
@@ -327,6 +340,9 @@ jobs:
     with:
       environment: storybook-test
       working-directory: examples/pnpm
+      build-secret-env: EXAMPLE_LICENSE_KEY
+    secrets:
+      BUILD_SECRET: never-used
 
   publish-storybook-skipped:
     name: Check publish-storybook skipped
@@ -346,6 +362,76 @@ jobs:
     with:
       environment: storybook-test
       preview-name: pr-0
+
+  # pkg.pr.new's app isn't installed here, so this checks preview-npm skips with a notice rather than fails. Should it be
+  # installed one day, the check holds it to what it published instead.
+  preview-npm:
+    name: preview-npm (release example)
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/preview-npm.yml
+    with:
+      working-directory: examples/release
+      packages: |
+        packages/core
+        packages/cli
+      comment: false
+
+  preview-npm-checked:
+    name: Check preview-npm
+    needs: preview-npm
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          PUBLISHED: ${{ needs.preview-npm.outputs.published }}
+          PACKAGES: ${{ needs.preview-npm.outputs.packages }}
+          MARKDOWN: ${{ needs.preview-npm.outputs.markdown }}
+        run: |
+          set -x
+          if [ "$PUBLISHED" = true ]; then
+            test "$(jq -r 'map(.name) | sort | join(" ")' <<< "$PACKAGES")" = \
+              "@pipelines-example/cli @pipelines-example/core"
+            jq -e 'all(.url | startswith("https://pkg.pr.new/")) and all(.command | startswith("npm install "))' \
+              <<< "$PACKAGES"
+          else
+            test "$PUBLISHED" = false
+            test -z "$PACKAGES"
+            grep -q "GitHub App isn't installed" <<< "$MARKDOWN"
+          fi
+
+  # The desktop example's stand-in installers, kept a day, with links to each and no comment.
+  preview-desktop:
+    name: preview-desktop (desktop example)
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: ./.github/workflows/preview-desktop.yml
+    with:
+      working-directory: examples/desktop
+      app-directory: .
+      build-command: node --version
+      package-command: node package.mjs
+      artifact-prefix: test-installers
+      retention-days: 1
+      comment: false
+
+  preview-desktop-checked:
+    name: Check preview-desktop
+    needs: preview-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          ARTIFACTS: ${{ needs.preview-desktop.outputs.artifacts }}
+          MARKDOWN: ${{ needs.preview-desktop.outputs.markdown }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -x
+          test "$(jq -r 'map("\(.os)=\(.name)") | join(" ")' <<< "$ARTIFACTS")" = \
+            "Linux=test-installers-ubuntu-latest macOS=test-installers-macos-latest Windows=test-installers-windows-latest"
+          jq -e --arg run "$RUN_URL/artifacts/" 'all(.url | startswith($run)) and all(.size > 0)' <<< "$ARTIFACTS"
+          for url in $(jq -r '.[].url' <<< "$ARTIFACTS"); do grep -qF "$url" <<< "$MARKDOWN"; done
 
   # The release templates against the release example: its change files bump three packages, and its packages are ones
   # each publishing rule keeps or leaves out. Dry runs push and publish nothing, so they need no token.
@@ -737,6 +823,32 @@ jobs:
           RESULT: ${{ needs.terraform-plan.outputs.result }}
         run: test "$RESULT" = skipped
 
+  # With state credentials, which are never used, but not the provider's, the plan skips before reading any state.
+  terraform-plan-credentials:
+    name: terraform-plan (no provider credentials)
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/terraform-plan.yml
+    with:
+      working-directory: terraform/cloudflare-storybook/examples/basic
+      fmt-path: ../..
+      state-bucket: example-terraform-state
+      state-endpoint: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
+      credentials: CLOUDFLARE_API_TOKEN TF_GITHUB_TOKEN
+    secrets:
+      TF_STATE_ACCESS_KEY_ID: test-key-never-used
+      TF_STATE_SECRET_ACCESS_KEY: test-secret-never-used
+
+  terraform-plan-credentials-skipped:
+    name: Check terraform-plan skipped without provider credentials
+    needs: terraform-plan-credentials
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.terraform-plan-credentials.outputs.result }}
+        run: test "$RESULT" = skipped
+
   terraform-apply:
     name: terraform-apply (no environment settings)
     uses: ./.github/workflows/terraform-apply.yml
@@ -798,6 +910,10 @@ jobs:
       - publish-storybook
       - publish-storybook-skipped
       - unpublish-storybook
+      - preview-npm
+      - preview-npm-checked
+      - preview-desktop
+      - preview-desktop-checked
       - release-prepare
       - cd-npm-publish
       - cd-npm-publish-public
@@ -815,6 +931,8 @@ jobs:
       - terraform
       - terraform-plan
       - terraform-plan-skipped
+      - terraform-plan-credentials
+      - terraform-plan-credentials-skipped
       - terraform-apply
       - terraform-apply-skipped
       - terraform-apply-unconfigured

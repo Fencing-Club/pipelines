@@ -41,6 +41,16 @@ on:
         description: vite-plus, pnpm, or auto, as the setup action takes it.
         type: string
         default: auto
+      build-secret-env:
+        description: Optional environment variable name for BUILD_SECRET, such as VITE_TLDRAW_LICENSE_KEY.
+        type: string
+        default: ""
+    secrets:
+      BUILD_SECRET:
+        description: >-
+          One optional build setting, given to the build command as build-secret-env names it. A Storybook is public, so
+          only a setting meant to ship in its files, such as a client-side licence key.
+        required: false
     outputs:
       url:
         description: Where the Storybook was published; empty when publishing was skipped.
@@ -98,7 +108,17 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
       - if: steps.ready.outputs.ready == 'true' && inputs.artifact == ''
         working-directory: ${{ inputs.working-directory }}
-        run: ${{ inputs.build-command }}
+        env:
+          BUILD_COMMAND: ${{ inputs.build-command }}
+          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          BUILD_SECRET_ENV: ${{ inputs.build-secret-env }}
+        run: |
+          if [ -n "$BUILD_SECRET_ENV" ]; then
+            [[ "$BUILD_SECRET_ENV" =~ ^[A-Z_][A-Z0-9_]*$ ]] || exit 1
+            if [ -n "$BUILD_SECRET" ]; then export "$BUILD_SECRET_ENV=$BUILD_SECRET";
+            else echo "::notice::No optional build secret configured."; fi
+          fi
+          bash -e -o pipefail -c "$BUILD_COMMAND"
 
       - if: steps.ready.outputs.ready == 'true' && inputs.artifact != ''
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

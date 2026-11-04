@@ -30,6 +30,8 @@ fix lands in one place instead of being copied between repositories.
 | `.github/workflows/unpublish-storybook.yml`   | Reusable workflow | Deletes a pull request's Storybook preview                                                                  |
 | `.github/workflows/preview-web.yml`           | Reusable workflow | Publishes a pull request's web app as a Worker preview, optionally with a Neon branch, and comments its URL |
 | `.github/workflows/preview-web-cleanup.yml`   | Reusable workflow | Deletes a pull request's web app preview, and its Neon branch when it has one                               |
+| `.github/workflows/preview-npm.yml`           | Reusable workflow | Publishes a pull request's npm packages to pkg.pr.new, to install or run with npx from a URL                |
+| `.github/workflows/preview-desktop.yml`       | Reusable workflow | Builds a pull request's unsigned desktop installers on each system, kept as the run's artifacts             |
 | `.github/workflows/terraform-plan.yml`        | Reusable workflow | Plans a pull request's Terraform project against its state in R2, and comments a summary of the plan        |
 | `.github/workflows/terraform-apply.yml`       | Reusable workflow | Applies a Terraform project in a GitHub environment, such as from `main` after a merge                      |
 | `.github/workflows/release-prepare.yml`       | Reusable workflow | Opens or updates Beachball's release pull request from the change files on `main`                           |
@@ -42,8 +44,8 @@ fix lands in one place instead of being copied between repositories.
 | `terraform/cloudflare-web`                    | Terraform module  | Makes a web app's Workers and token, and the environment settings the web templates read                    |
 | `terraform/github-repository-rules`           | Terraform module  | Writes a repository's rulesets: pull requests into the default branch, and release tags that never move     |
 
-Planned, in the order repositories need them: previews (`preview-npm`, `preview-desktop` and their cleanup), and the
-rest of delivery (`cd-desktop-build`, `cd-desktop-release`, `cd-desktop-promote`).
+`preview-npm` and `preview-desktop` need no cleanup: pkg.pr.new keeps what it's given, and artifacts expire. Planned:
+`cd-desktop-build`, one build of the installers that `preview-desktop` and `cd-desktop-release` both call.
 
 ## Callers
 
@@ -57,7 +59,7 @@ uses: betterapps-hq/pipelines/.github/workflows/ci-verify.yml@daadeb4db946e05b27
 
 | Repository                  | Visibility | On the templates                                                                    | Next                                                                     |
 | --------------------------- | ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Parity (`betterapps-hq`)    | Public     | `ci-verify` on three systems, with type and change checks; `terraform-plan`/`apply` | Releases with `release-prepare` and `cd-npm-publish`; Storybook previews |
+| Parity (`betterapps-hq`)    | Public     | `ci-verify` on three systems, with type and change checks; `terraform-plan`/`apply` | Previews of its CLI, installers and Storybook                            |
 | Buildkit (`AndrewCraswell`) | Public     | `ci-verify`, behind a `verify` gate job; `setup` in its other test jobs             | The release pull request and npm publishing                              |
 | Agency (`AndrewCraswell`)   | Public     | `ci-verify`, with `env` for its registry; `setup` in its detection job              | Its deploys stay its own                                                 |
 | Spawn (`AndrewCraswell`)    | Private    | `ci-verify`; `setup` in its browser and template jobs                               | `preview-web`, `cd-web-deploy` and `cd-web-promote`                      |

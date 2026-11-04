@@ -1,0 +1,156 @@
+name: Preview npm packages
+
+# Publishes a pull request's npm packages to pkg.pr.new, so each can be installed, or run with npx, from a URL before it's
+# released. pkg.pr.new's GitHub App has to be installed on the repository; until it is, this skips with a notice. Nothing
+# needs deleting when the pull request closes. github/README.md shows a caller.
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: >-
+          The packages' folders, relative to the working directory, separated by spaces or lines, such as packages/cli.
+        type: string
+        required: true
+      working-directory:
+        description: The workspace's root, relative to the repository's.
+        type: string
+        default: .
+      build-command:
+        description: >-
+          What runs before packing, in the working directory. Empty runs nothing; packing runs each package's prepack
+          script either way.
+        type: string
+        default: ""
+      package-manager:
+        description: What packs each package, so workspace and catalog versions are written out as it publishes them.
+        type: string
+        default: pnpm
+      comment:
+        description: On a pull request, comment how to install each package, editing the same comment on later runs.
+        type: boolean
+        default: true
+      toolchain:
+        description: vite-plus, pnpm, or auto, as the setup action takes it.
+        type: string
+        default: auto
+    outputs:
+      published:
+        description: true when the packages were published; false when it skipped.
+        value: ${{ jobs.publish.outputs.published }}
+      packages:
+        description: >-
+          A JSON array of what was published, each with its name, url, and command: npx <url> for a package with a bin,
+          and npm install <url> otherwise. Empty when it skipped.
+        value: ${{ jobs.publish.outputs.packages }}
+      markdown:
+        description: What was published, as Markdown for a comment, or why nothing was.
+        value: ${{ jobs.publish.outputs.markdown }}
+
+permissions:
+  contents: read
+
+env:
+  PKG_PR_NEW_VERSION: 0.0.92
+
+jobs:
+  publish:
+    name: Publish to pkg.pr.new
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Write, to comment. The caller's job has to grant it too.
+      pull-requests: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      packages: ${{ steps.describe.outputs.packages }}
+      markdown: ${{ steps.describe.outputs.markdown }}
+    # An explicit bash runs with pipefail, so pkg-pr-new's own failure isn't hidden behind tee.
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: betterapps-hq/pipelines/github/actions/setup@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          toolchain: ${{ inputs.toolchain }}
+
+      - if: inputs.build-command != ''
+        env:
+          BUILD_COMMAND: ${{ inputs.build-command }}
+        run: bash -e -o pipefail -c "$BUILD_COMMAND"
+
+      # pkg.pr.new checks its app is installed before anything is packed, so a repository without it skips quickly.
+      # Its own comment is off: this workflow's says the same, and a caller can put it in a comment of its own.
+      - id: publish
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          case "$PACKAGE_MANAGER" in
+            npm) flags=() ;;
+            pnpm | yarn | bun) flags=("--$PACKAGE_MANAGER") ;;
+            *)
+              echo "::error::package-manager is npm, pnpm, yarn or bun, not $PACKAGE_MANAGER."
+              exit 1
+              ;;
+          esac
+          read -ra folders <<< "$(tr '\n' ' ' <<< "$PACKAGES")"
+          if [ "${#folders[@]}" -eq 0 ]; then
+            echo "::error::packages names no folders to publish."
+            exit 1
+          fi
+          log="$RUNNER_TEMP/pkg-pr-new.log"
+          if npx --yes "pkg-pr-new@$PKG_PR_NEW_VERSION" publish "${flags[@]}" --comment=off \
+            --json "$RUNNER_TEMP/pkg-pr-new.json" "${folders[@]}" 2>&1 | tee "$log"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif grep -q "apps/pkg-pr-new is not installed" "$log"; then
+            echo "::notice::Skipped: pkg.pr.new's GitHub App isn't installed on $GITHUB_REPOSITORY. Install it from https://github.com/apps/pkg-pr-new to publish previews."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            exit 1
+          fi
+
+      - id: describe
+        env:
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+          PACKAGES: ${{ inputs.packages }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs"
+          import { join } from "node:path"
+          const { PUBLISHED, PACKAGES, SHA, RUNNER_TEMP, GITHUB_OUTPUT, GITHUB_REPOSITORY } = process.env
+          let packages = []
+          let markdown
+          if (PUBLISHED === "true") {
+            const bins = new Map()
+            for (const folder of PACKAGES.split(/\s+/).filter(Boolean)) {
+              const manifest = JSON.parse(readFileSync(join(folder, "package.json"), "utf8"))
+              bins.set(manifest.name, Boolean(manifest.bin))
+            }
+            const published = JSON.parse(readFileSync(join(RUNNER_TEMP, "pkg-pr-new.json"), "utf8")).packages
+            packages = published.map(({ name, url }) => ({
+              name,
+              url,
+              command: `${bins.get(name) ? "npx" : "npm install"} ${url}`
+            }))
+            markdown = [
+              `**npm packages** from ${SHA.slice(0, 7)}, on pkg.pr.new:`,
+              "",
+              ...packages.map(({ name, command }) => `- \`${name}\`: \`${command}\``)
+            ].join("\n")
+          } else {
+            markdown = `**npm packages:** not published, since pkg.pr.new's GitHub App isn't installed on ${GITHUB_REPOSITORY}.`
+          }
+          appendFileSync(GITHUB_OUTPUT, `packages=${packages.length ? JSON.stringify(packages) : ""}\n`)
+          appendFileSync(GITHUB_OUTPUT, `markdown<<PREVIEW_NPM_EOF\n${markdown}\nPREVIEW_NPM_EOF\n`)
+          NODE
+
+      # One comment per workflow, found by its marker, which later runs edit.
+      - if: steps.publish.outputs.published == 'true' && inputs.comment && github.event_name == 'pull_request'
+        uses: betterapps-hq/pipelines/github/actions/pr-comment@c0b8b27760038e6e73a90eb77339fd8fb8068825 # v1.12.0
+        with:
+          marker: "<!-- preview-npm ${{ inputs.working-directory }} -->"
+          body: ${{ steps.describe.outputs.markdown }}
