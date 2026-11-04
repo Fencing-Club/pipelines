@@ -550,6 +550,25 @@ jobs:
           export TEST_TAG=conflicting
           if run_case; then echo "A conflicting tag unexpectedly published"; exit 1; fi
           test "$(wc -l < "$TEST_EDITS")" = 3
+      # A job waiting for its environment's reviewers holds its concurrency group, so a pending production approval
+      # once kept the next beta from publishing (PAR-504). Approval waits outside the lock, and only after it does the
+      # promotion take the lock it shares with publishing.
+      - name: Check a pending approval can't hold the publishing lock
+        shell: bash
+        run: |
+          release=.github/workflows/cd-desktop-release.yml
+          promote=.github/workflows/cd-desktop-promote.yml
+          locked() { yq -o=json '[.jobs | to_entries[] | select(.value.concurrency.group == "cd-desktop-publish")]' "$1"; }
+          jobs=$(jq -s 'add' <(locked "$release") <(locked "$promote"))
+          test "$(jq -r 'map(.key) | sort | join(" ")' <<< "$jobs")" = "promote publish"
+          gated=$(jq -r 'map(select(.value.environment != null) | .key) | join(" ")' <<< "$jobs")
+          [ -z "$gated" ] || { echo "Waits for an environment while holding cd-desktop-publish: $gated"; exit 1; }
+          test "$(jq -r 'map(.value.concurrency["cancel-in-progress"]) | unique | join(" ")' <<< "$jobs")" = false
+          # Production's approval is still required: promote needs the job that waits on the caller's environment.
+          test "$(yq '.jobs.promote.needs' "$promote")" = approve
+          test "$(yq '.jobs.approve.environment.name | test("^[$][{][{] *inputs[.]environment *[}][}]$")' "$promote")" = true
+          test "$(yq '.jobs.approve.concurrency' "$promote")" = null
+          test "$(yq '[.jobs[] | select(.environment != null)] | length' "$promote")" = 1
 
   # One job that bumps, publishes and pushes; as a dry run, it only bumps in the runner's checkout.
   beachball-publish-npm:

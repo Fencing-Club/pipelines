@@ -219,6 +219,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    # Shared with cd-desktop-promote's promote job. No job in this group waits on an environment's approval, which would
+    # hold the group while it waits.
     concurrency:
       group: cd-desktop-publish
       cancel-in-progress: false

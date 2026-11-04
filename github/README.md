@@ -25,8 +25,11 @@ read: these are unsigned installers, with a notice in the build log. Signing is 
 environment with required reviewers and default-branch-only deployment rules. It requires `contents: write`, checks that
 the beta's immutable tag, version, asset list and SHA-256 hashes match its `desktop-release.json`, and refuses a
 downgrade below the latest stable release. Approval promotes the existing beta to latest without rebuilding or replacing
-files. An already stable release is a no-op. Release publication and promotion share a concurrency group. The
-deployment's environment URL links to that version's GitHub release page, where its installers can be downloaded.
+files. An already stable release is a no-op. The environment's approval is asked for in an `approve` job that takes no
+lock; only once it's approved does `promote` take the `cd-desktop-publish` concurrency group it shares with release
+publication. Publishing and promotion still run one at a time, but a promotion waiting for approval doesn't hold up the
+next beta. The deployment's environment URL links to that version's GitHub release page, where its installers can be
+downloaded.
 
 For example, a caller's `cd-desktop.yml` can use:
 
