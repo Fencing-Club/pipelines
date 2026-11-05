@@ -6,8 +6,9 @@
 installers and update metadata, and publishes `v<version>` as a GitHub pre-release. Only the desktop package uses these
 tags; npm packages publish separately. A release started by CI builds that successful default-branch push's exact
 commit, even if the branch moves while installers build. Manual retries require a successful push run of `ci-workflow`
-on the selected default-branch commit. Version changes trigger automatic delivery; a manual retry can publish an
-existing version that has no release yet. Published releases are skipped; interrupted draft uploads can be retried.
+on the selected default-branch commit. Each CI pass on the default branch publishes the app's version when it has no
+release yet, so a version whose own commit's CI run was cancelled by a newer push still ships with the next pass.
+Published releases are skipped; interrupted draft uploads can be retried.
 
 The caller grants `contents: write` and `actions: read`, keeps its trigger on the default branch, and calls the template
 at `main`. `working-directory` defaults to `.`, `app-directory` to `apps/desktop`, `build-command` to `pnpm build`,
