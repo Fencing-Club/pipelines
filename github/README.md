@@ -1222,10 +1222,11 @@ finds no change files and releases nothing.
 | `publish`           | `true`                                    | `false` versions and pushes without building or publishing.        |
 | `dry-run`           | `false`                                   | Bump and report without publishing or pushing.                     |
 
-Secrets: `RELEASE_DEPLOY_KEY`, from the environment, which the template reads only when the caller passes
-`secrets: inherit`, or passed by the caller. Outputs: `packages`, those whose version changed, as a JSON array of
-`name`, `from` and `to`; and `published`. Permissions: `contents: read` and `id-token: write`, which the calling job
-grants.
+Secrets: `RELEASE_DEPLOY_KEY`, which the caller passes by name. The caller's job has no environment, so what it passes
+is empty, and the template's job takes the environment's own in its place: Parity's `cd-npm.yml` passes it so, through
+`cd-npm-release`, and its release read the `npm` environment's key on 2026-11-05. `secrets: inherit` isn't needed.
+Outputs: `packages`, those whose version changed, as a JSON array of `name`, `from` and `to`; and `published`.
+Permissions: `contents: read` and `id-token: write`, which the calling job grants.
 
 ```yaml
 # In the caller's ci.yml, after the jobs that verify main. Each package's trusted publisher names ci.yml.
@@ -1236,8 +1237,9 @@ release:
     contents: read
     id-token: write
   uses: betterapps-hq/pipelines/.github/workflows/beachball-publish-npm.yml@main
-  # A called workflow sees its environment's secrets, such as RELEASE_DEPLOY_KEY, only when the caller inherits them.
-  secrets: inherit
+  # Passed by name; the template's job reads the npm environment's own.
+  secrets:
+    RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
 ```
 
 ## Web apps
