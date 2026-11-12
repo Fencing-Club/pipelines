@@ -118,6 +118,8 @@ jobs:
       # As setup's own test, this repository has no LFS objects, so it proves the input reaches setup cleanly.
       lfs: true
       vite-task-cache: ${{ matrix.example == 'vite-plus' }}
+      # On Windows the install, the cache and the commands run on a Dev Drive, with TEMP on it; elsewhere it's ignored.
+      dev-drive: true
       prepare: echo prepared > prepared.txt
       cache-path: examples/${{ matrix.example }}/prepared.txt
       cache-key-files: examples/${{ matrix.example }}/package.json
@@ -125,6 +127,12 @@ jobs:
         test "$EXAMPLE_ENV" = "reached the install and every step"
         test "$NODE_OPTIONS" = --max-old-space-size=4096
         test -f prepared.txt
+        if [ "$RUNNER_OS" = Windows ]; then
+          drive="${DEV_DRIVE//\\//}"
+          case "$(pwd -W)" in "$drive"/*) ;; *) echo "::error::$(pwd -W) isn't on the Dev Drive, $drive." && exit 1 ;; esac
+          case "${TEMP//\\//}" in "$drive"/*) ;; *) echo "::error::TEMP, $TEMP, isn't on the Dev Drive." && exit 1 ;; esac
+          test -d node_modules
+        fi
         ${{ matrix.verify }}
 
   # A build handed to a later job: each runner builds, and only artifact-os uploads, though it's listed second. Each
