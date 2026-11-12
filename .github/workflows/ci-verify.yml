@@ -171,17 +171,21 @@ jobs:
             echo "$line" >> "$GITHUB_ENV"
           done <<< "$LINES"
 
-      # On a Dev Drive, the checkout is made here and copied onto the drive, as actions/checkout only checks out inside
-      # the workspace and would try to empty a drive mounted there. Windows' checkout would otherwise turn LF into CRLF,
-      # as setup's own says. The drive grows as it fills, up to its size. TEMP and pnpm's store go on it too, since
-      # installers and tests write to TEMP, and the store and node_modules on one ReFS drive can be cloned, not copied.
-      - if: inputs.dev-drive && runner.os == 'Windows'
-        run: git config --global core.autocrlf false
-      - if: inputs.dev-drive && runner.os == 'Windows'
-        uses: actions/checkout@v7
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main. On a Dev Drive
+      # it checks out and sets up the toolchain only, since its actions hash and read files only inside the workspace,
+      # and the install runs on the drive below.
+      - id: setup
+        uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
-          persist-credentials: false
+          lfs: ${{ inputs.lfs }}
+          working-directory: ${{ inputs.working-directory }}
+          toolchain: ${{ inputs.toolchain }}
+          install: ${{ !(inputs.dev-drive && runner.os == 'Windows') }}
+
+      # The checkout is copied onto the drive, as actions/checkout only checks out inside the workspace and would try to
+      # empty a drive mounted there. The drive grows as it fills, up to its size. TEMP and pnpm's store go on it too,
+      # since installers and tests write to TEMP, and the store and node_modules on one ReFS drive can be cloned.
       - if: inputs.dev-drive && runner.os == 'Windows'
         uses: samypr100/setup-dev-drive@v4
         with:
@@ -229,14 +233,23 @@ jobs:
             echo "CI_VERIFY_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
-      - uses: betterapps-hq/pipelines/github/actions/setup@main
+      # The install on the drive, from pnpm's store, which is cached on the lockfile, hashed in the checkout. Vite+ and
+      # pnpm install frozen on CI.
+      - if: inputs.dev-drive && runner.os == 'Windows'
+        uses: actions/cache@v6
         with:
-          checkout: ${{ !(inputs.dev-drive && runner.os == 'Windows') }}
-          fetch-depth: ${{ inputs.fetch-depth }}
-          lfs: ${{ inputs.lfs }}
-          working-directory: ${{ steps.root.outputs.directory }}
-          toolchain: ${{ inputs.toolchain }}
+          path: ${{ env.DEV_DRIVE }}\pnpm-store
+          key:
+            ci-verify-pnpm-store-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/pnpm-lock.yaml',
+            inputs.working-directory)) }}
+          restore-keys: ci-verify-pnpm-store-${{ runner.os }}-${{ runner.arch }}-
+      - if: inputs.dev-drive && runner.os == 'Windows'
+        working-directory: ${{ steps.root.outputs.directory }}
+        env:
+          TOOLCHAIN: ${{ steps.setup.outputs.toolchain }}
+        run: |
+          if [ "$TOOLCHAIN" = vite-plus ]; then vp install; else pnpm install --frozen-lockfile; fi
+
       # The key's files are hashed in the checkout, which the Dev Drive's copy matches.
       - if: inputs.cache-path != ''
         uses: actions/cache@v6
