@@ -101,6 +101,13 @@ on:
         description: Days the artifact is kept; 0 for the repository's setting.
         type: number
         default: 0
+      dev-drive:
+        description: >-
+          On Windows, copy the checkout onto a trusted Dev Drive and run the install, caches and commands there, with
+          TEMP and pnpm's store on it too. It speeds up work that touches many small files. Other systems ignore it. Off
+          only for a command that needs to run in $GITHUB_WORKSPACE itself.
+        type: boolean
+        default: true
     secrets:
       TURBO_TOKEN:
         description:
@@ -131,10 +138,11 @@ jobs:
         ci-verify-${{ github.workflow }}-${{ inputs.concurrency-key || github.ref }}-${{ inputs.working-directory }}-${{
         matrix.os }}
       cancel-in-progress: ${{ inputs.cancel-in-progress }}
+    # Steps that need the workspace name it themselves, from the root step, since on a Dev Drive it isn't the checkout.
     defaults:
       run:
         shell: bash
-        working-directory: ${{ inputs.working-directory }}
+        working-directory: .
     steps:
       # Otherwise no runner would upload, and a later job would find nothing to download.
       - if: inputs.artifact-path != '' && inputs.artifact-os != '' && !contains(fromJSON(inputs.os), inputs.artifact-os)
@@ -164,28 +172,102 @@ jobs:
             echo "$line" >> "$GITHUB_ENV"
           done <<< "$LINES"
 
-      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main.
-      - uses: betterapps-hq/pipelines/github/actions/setup@main
+      # A reusable workflow's ./ is the caller's repository, so it names its own actions in full, at main. On a Dev Drive
+      # it checks out and sets up the toolchain only, since its actions hash and read files only inside the workspace,
+      # and the install runs on the drive below.
+      - id: setup
+        uses: betterapps-hq/pipelines/github/actions/setup@main
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
           lfs: ${{ inputs.lfs }}
           working-directory: ${{ inputs.working-directory }}
           toolchain: ${{ inputs.toolchain }}
+          install: ${{ !(inputs.dev-drive && runner.os == 'Windows') }}
+
+      # The checkout is copied onto the drive, as actions/checkout only checks out inside the workspace and would try to
+      # empty a drive mounted there. The drive grows as it fills, up to its size. TEMP and pnpm's store go on it too,
+      # since installers and tests write to TEMP, and the store and node_modules on one ReFS drive can be cloned.
+      - if: inputs.dev-drive && runner.os == 'Windows'
+        uses: samypr100/setup-dev-drive@v4
+        with:
+          drive-size: 60GB
+          drive-format: ReFS
+          drive-type: Dynamic
+          workspace-copy: true
+          trusted-dev-drive: true
+          env-mapping: |
+            TEMP,{{ DEV_DRIVE }}\tmp
+            TMP,{{ DEV_DRIVE }}\tmp
+            npm_config_store_dir,{{ DEV_DRIVE }}\pnpm-store
+            pnpm_config_store_dir,{{ DEV_DRIVE }}\pnpm-store
+
+      # Where the workspace is, and the caller's cache and artifact paths, which are relative to the repository: the
+      # checkout, or its copy on the Dev Drive. Without a drive they're passed on as they came.
+      - id: root
+        env:
+          DEV: ${{ inputs.dev-drive && runner.os == 'Windows' }}
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+          CACHE_PATH: ${{ inputs.cache-path }}
+          ARTIFACT_PATH: ${{ inputs.artifact-path }}
+        run: |
+          base=
+          if [ "$DEV" = true ]; then
+            base="${DEV_DRIVE_WORKSPACE//\\//}/"
+            mkdir -p "${DEV_DRIVE//\\//}/tmp"
+          fi
+          paths() {
+            while IFS= read -r line; do
+              [ -z "${line//[[:space:]]/}" ] && continue
+              case "$line" in
+                "~"* | /* | [A-Za-z]:*) echo "$line" ;;
+                *) echo "$base${line#./}" ;;
+              esac
+            done <<< "$1"
+          }
+          {
+            echo "directory=$base$WORKING_DIRECTORY"
+            echo "cache-path<<CI_VERIFY_EOF"
+            paths "$CACHE_PATH"
+            echo "CI_VERIFY_EOF"
+            echo "artifact-path<<CI_VERIFY_EOF"
+            paths "$ARTIFACT_PATH"
+            echo "CI_VERIFY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # The install on the drive, from pnpm's store, which is cached on the lockfile, hashed in the checkout. Vite+ and
+      # pnpm install frozen on CI.
+      - if: inputs.dev-drive && runner.os == 'Windows'
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.DEV_DRIVE }}\pnpm-store
+          key:
+            ci-verify-pnpm-store-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/pnpm-lock.yaml',
+            inputs.working-directory)) }}
+          restore-keys: ci-verify-pnpm-store-${{ runner.os }}-${{ runner.arch }}-
+      - if: inputs.dev-drive && runner.os == 'Windows'
+        working-directory: ${{ steps.root.outputs.directory }}
+        env:
+          TOOLCHAIN: ${{ steps.setup.outputs.toolchain }}
+        run: |
+          if [ "$TOOLCHAIN" = vite-plus ]; then vp install; else pnpm install --frozen-lockfile; fi
+
+      # The key's files are hashed in the checkout, which the Dev Drive's copy matches.
       - if: inputs.cache-path != ''
         uses: actions/cache@v6
         with:
-          path: ${{ inputs.cache-path }}
+          path: ${{ steps.root.outputs.cache-path }}
           key: ci-verify-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(inputs.cache-key-files) }}
       # Restored from the newest cache for this key, then saved under this run when every step passes.
       - if: inputs.vite-task-cache
         uses: betterapps-hq/pipelines/github/actions/vite-task-cache@main
         with:
-          working-directory: ${{ inputs.working-directory }}
+          working-directory: ${{ steps.root.outputs.directory }}
           key: ${{ inputs.vite-task-cache-key }}
       # The caller's scripts come through env and run in this shell. Only they get Turborepo's secrets, never the
       # install and its scripts, and NODE_OPTIONS, which would also reach the actions above; GitHub won't take it through
       # GITHUB_ENV anyway. Each one that's empty is unset, since Turborepo would try to use an empty token.
       - if: inputs.prepare != ''
+        working-directory: ${{ steps.root.outputs.directory }}
         env:
           CI_VERIFY_SCRIPT: ${{ inputs.prepare }}
           NODE_OPTIONS: ${{ inputs.node-options }}
@@ -194,7 +276,8 @@ jobs:
         run: |
           for name in NODE_OPTIONS TURBO_TOKEN TURBO_REMOTE_CACHE_SIGNATURE_KEY; do [ -n "${!name}" ] || unset "$name"; done
           eval "$CI_VERIFY_SCRIPT"
-      - env:
+      - working-directory: ${{ steps.root.outputs.directory }}
+        env:
           CI_VERIFY_SCRIPT: ${{ inputs.command }}
           NODE_OPTIONS: ${{ inputs.node-options }}
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -210,7 +293,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
-          path: ${{ inputs.artifact-path }}
+          path: ${{ steps.root.outputs.artifact-path }}
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: error
           overwrite: true
