@@ -130,7 +130,9 @@ jobs:
         if [ "$RUNNER_OS" = Windows ]; then
           drive="${DEV_DRIVE//\\//}"
           case "$(pwd -W)" in "$drive"/*) ;; *) echo "::error::$(pwd -W) isn't on the Dev Drive, $drive." && exit 1 ;; esac
-          case "${TEMP//\\//}" in "$drive"/*) ;; *) echo "::error::TEMP, $TEMP, isn't on the Dev Drive." && exit 1 ;; esac
+          # Git Bash shows TEMP as /tmp, mounted where Windows' TEMP is, which is what programs it starts get.
+          temp="$(cygpath -m "$TEMP")"
+          case "$temp" in "$drive"/*) ;; *) echo "::error::TEMP, $temp, isn't on the Dev Drive." && exit 1 ;; esac
           test -d node_modules
         fi
         ${{ matrix.verify }}
