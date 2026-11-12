@@ -104,9 +104,10 @@ on:
       dev-drive:
         description: >-
           On Windows, copy the checkout onto a trusted Dev Drive and run the install, caches and commands there, with
-          TEMP and pnpm's store on it too. It speeds up work that touches many small files. Other systems ignore it.
+          TEMP and pnpm's store on it too. It speeds up work that touches many small files. Other systems ignore it. Off
+          only for a command that needs to run in $GITHUB_WORKSPACE itself.
         type: boolean
-        default: false
+        default: true
     secrets:
       TURBO_TOKEN:
         description:

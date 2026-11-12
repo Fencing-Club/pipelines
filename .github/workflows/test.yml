@@ -118,8 +118,8 @@ jobs:
       # As setup's own test, this repository has no LFS objects, so it proves the input reaches setup cleanly.
       lfs: true
       vite-task-cache: ${{ matrix.example == 'vite-plus' }}
-      # On Windows the install, the cache and the commands run on a Dev Drive, with TEMP on it; elsewhere it's ignored.
-      dev-drive: true
+      # dev-drive is on by default: on Windows the install, the cache and the commands run on a Dev Drive, with TEMP on
+      # it. The artifact job below runs on Windows with it too.
       prepare: echo prepared > prepared.txt
       cache-path: examples/${{ matrix.example }}/prepared.txt
       cache-key-files: examples/${{ matrix.example }}/package.json

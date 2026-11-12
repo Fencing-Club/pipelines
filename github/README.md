@@ -289,7 +289,7 @@ before it.
 | `artifact-name`           | `build`             | The artifact's name.                                                                    |
 | `artifact-os`             | (empty)             | The runner in `os` that uploads it; empty for the first in `os`.                        |
 | `artifact-retention-days` | `0`                 | Days the artifact is kept; `0` for the repository's setting.                            |
-| `dev-drive`               | `false`             | On Windows, run from a copy of the checkout on a Dev Drive. Other systems ignore it.    |
+| `dev-drive`               | `true`              | On Windows, run from a copy of the checkout on a Dev Drive. Other systems ignore it.    |
 
 | Secret                             | What it's for                                                                    |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
@@ -304,12 +304,12 @@ Permissions: `contents: read`.
 | `artifact-name` | The name of the artifact `artifact-path` uploaded, or empty when nothing was uploaded |
 
 - **Commands run in bash on every system,** Windows included.
-- **`dev-drive` moves a Windows run onto a Dev Drive:** a ReFS drive Defender trusts, made with
+- **A Windows run happens on a Dev Drive unless `dev-drive` is off:** a ReFS drive Defender trusts, made with
   [setup-dev-drive](https://github.com/samypr100/setup-dev-drive). The checkout is copied onto it, and the install,
   `cache-path`, the task cache, `prepare`, `command` and `artifact-path` all use the copy, with `TEMP` and pnpm's store
   on the drive too. Installs, cache restores and tests that read many small files are faster there. Commands find the
-  copy as their working directory, and `$DEV_DRIVE_WORKSPACE` names it; `$GITHUB_WORKSPACE` is still the checkout. It's
-  tried with Vite+ workspaces.
+  copy as their working directory, and `$DEV_DRIVE_WORKSPACE` names it; `$GITHUB_WORKSPACE` is still the checkout, so a
+  command that finds files through it turns `dev-drive` off.
 - **`env` is for settings the install needs,** such as `PNPM_CONFIG_REGISTRY` when a committed `.npmrc` points at a
   registry CI can't reach. A caller's own workflow-level `env` doesn't reach a reusable workflow. GitHub won't set
   `NODE_OPTIONS` this way, so it has an input of its own, which reaches only the caller's scripts.
